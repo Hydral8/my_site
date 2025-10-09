@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background-start: #0B0B0D;
+  --background-end: #111111;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  background: linear-gradient(135deg, var(--background-start) 0%, var(--background-end) 100%);
+  background-attachment: fixed;
+  color: #EAEAEA;
+  min-height: 100vh;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .glow-cyan {
+    text-shadow: 0 0 10px #00F5D4, 0 0 20px #00F5D4, 0 0 30px #00F5D4;
+  }
+
+  .glow-purple {
+    text-shadow: 0 0 10px #A29BFE, 0 0 20px #A29BFE, 0 0 30px #A29BFE;
+  }
+
+  .glow-bug {
+    box-shadow: 0 0 20px #FF006E, 0 0 40px #FF006E;
+  }
+}
