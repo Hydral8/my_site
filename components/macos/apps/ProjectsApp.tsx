@@ -484,6 +484,7 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                     fill
                     className="object-cover"
                     sizes="(max-width: 768px) 33vw, 33vw"
+                    priority={index < 6}
                   />
                   {/* Overlay on hover */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200" />
@@ -515,6 +516,7 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                       width={project.title === 'RocLab' ? 112 : 64}
                       height={project.title === 'RocLab' ? 112 : 64}
                       className={`${project.title === 'RocLab' ? 'mb-2' : 'mb-4'} object-contain`}
+                      priority
                     />
                     {project.title === 'RocLab' ? (
                       <p className="text-xs text-center text-gray-900 font-medium">
@@ -562,39 +564,42 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
       <AnimatePresence>
         {selectedPhoto && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
             onClick={() => setSelectedPhoto(null)}
             className="absolute inset-0 bg-black/95 backdrop-blur-xl flex items-center justify-center z-50 p-8"
           >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="max-w-4xl w-full max-h-[90vh] relative flex flex-col"
+            <div
+              className="relative"
+              style={{ 
+                width: 'min(calc(100% - 4rem), 800px)', 
+                height: 'min(calc(100% - 4rem), 600px)', 
+              }}
             >
               <button
                 onClick={() => setSelectedPhoto(null)}
-                className="absolute -top-12 right-0 text-white/60 hover:text-white transition-colors z-10"
+                className="absolute -top-8 right-2 text-white/60 hover:text-white transition-colors z-10"
               >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                   <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
-              <div className="relative w-full max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex items-center justify-center bg-black/20">
+              <div 
+                className="relative w-full h-full rounded-lg shadow-2xl overflow-hidden bg-gray-800"
+              >
                 <Image
                   src={selectedPhoto.src}
                   alt={selectedPhoto.alt}
-                  width={1920}
-                  height={1080}
-                  className="max-w-full max-h-[90vh] w-auto h-auto rounded-lg object-contain"
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1024px"
+                  fill
+                  className="rounded-lg"
+                  style={{ objectFit: 'contain' }}
+                  sizes="(max-width: 768px) calc(100vw - 4rem), (max-width: 1200px) 60vw, 800px"
                   priority
+                  onClick={(e) => e.stopPropagation()}
                 />
               </div>
-            </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -650,6 +655,7 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                             width={selectedProject.title === 'RocLab' ? 192 : 128}
                             height={selectedProject.title === 'RocLab' ? 192 : 128}
                             className={`${selectedProject.title === 'RocLab' ? 'mb-4' : 'mb-6'} object-contain`}
+                            priority
                           />
                           {selectedProject.title === 'RocLab' ? (
                             <p className="text-sm font-medium text-gray-900">
@@ -746,6 +752,7 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                                   width={40}
                                   height={40}
                                   className="object-contain"
+                                  priority
                                 />
                               )}
                               <div className="flex flex-col">

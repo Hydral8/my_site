@@ -40,7 +40,7 @@ const initialContacts: Contact[] = [
     color: 'bg-white',
     notes: 'Got some cool stuff here.',
     logo: (
-      <Image src="/icons/github.png" alt="GitHub" width={32} height={32} className="object-contain" />
+      <Image src="/icons/github.png" alt="GitHub" width={32} height={32} className="object-contain" priority />
     ),
   },
   {
@@ -53,7 +53,7 @@ const initialContacts: Contact[] = [
     initials: 'LI',
     notes: 'Connect with me on LinkedIn',
     logo: (
-      <Image src="/icons/linkedin.png" alt="LinkedIn" width={32} height={32} className="object-contain" />
+      <Image src="/icons/linkedin.png" alt="LinkedIn" width={32} height={32} className="object-contain" priority />
     ),
   },
   {
