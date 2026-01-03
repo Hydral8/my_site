@@ -46,19 +46,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // Load AI conversation
-      const aiMessages = await readAllMessagesFromStream(sessionId, '2', true);
-      if (aiMessages && aiMessages.length > 0) {
-        const lastMessage = aiMessages[aiMessages.length - 1];
-        conversations.push({
-          id: '2',
-          name: 'My Twin',
-          isAI: true,
-          lastMessage: lastMessage.text,
-          timestamp: lastMessage.timestamp,
-          unread: 0,
-        });
-      }
+      // AI conversations are transient (not stored in Redis) - don't include them in conversation list
 
       return NextResponse.json({
         success: true,
@@ -70,8 +58,8 @@ export async function GET(request: NextRequest) {
     let messages: any[] = [];
 
     if (isAI) {
-      // Load AI chat messages from stream
-      messages = await readAllMessagesFromStream(sessionId, '2', true);
+      // AI chat is transient - return empty (not stored in Redis)
+      messages = [];
     } else {
       // Load real user chat messages from stream
       if (!conversationId) {

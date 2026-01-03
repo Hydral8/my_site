@@ -58,12 +58,28 @@ export async function POST(request: NextRequest) {
         status: 'sent' as const,
       };
 
-      // Add to stream
+      // Add to stream (skip AI chat - it's transient)
       const isAI = conversationId === '2';
+      
+      if (isAI) {
+        // AI chat is transient - don't save to Redis
+        return NextResponse.json({
+          success: true,
+          message: {
+            id: messageId,
+            conversationId: conversationId,
+            text: newMessage.text,
+            sender: 'user',
+            timestamp: newMessage.timestamp.toISOString(),
+            status: newMessage.status,
+          },
+        });
+      }
+
       const streamId = await addMessageToStream(
         sessionId,
-        isAI ? '2' : 1,
-        isAI,
+        1,
+        false,
         newMessage
       );
 
@@ -106,7 +122,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Add each message to stream
+    // AI chat is transient - don't save to Redis
+    if (isAI) {
+      return NextResponse.json({
+        success: true,
+        message: 'AI chat messages are transient (not persisted)',
+        savedCount: 0,
+      });
+    }
+
+    // Add each message to stream (only for non-AI conversations)
     const streamIds: string[] = [];
     for (const msg of messages) {
       const message = {
@@ -119,8 +144,8 @@ export async function POST(request: NextRequest) {
         status: msg.status || 'sent',
       };
 
-      const convId = isAI ? '2' : (bodyConversationId || 1);
-      const streamId = await addMessageToStream(bodySessionId, convId, isAI || false, message);
+      const convId = bodyConversationId || 1;
+      const streamId = await addMessageToStream(bodySessionId, convId, false, message);
       if (streamId) {
         streamIds.push(streamId);
       }

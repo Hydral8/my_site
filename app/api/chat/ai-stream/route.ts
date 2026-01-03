@@ -75,12 +75,29 @@ My goal is to build world-changing products that meaningfully change how people 
 Keep responses short and concise. Try to keep responses under 100 words, messaging style.
 `;
 
+/**
+ * POST /api/chat/ai-stream
+ * Stream AI chat responses via SSE
+ * 
+ * Body:
+ * - message: string (required) - User's message
+ * - conversationHistory: Array<{text: string, sender: string}> (optional) - Previous messages
+ * - sessionId: string (optional) - Session ID (not used for push notifications - AI chat doesn't send push)
+ * - messageId: string (required) - Client-generated message ID for the AI response
+ */
 export async function POST(request: NextRequest) {
   try {
-    const { message, conversationHistory, sessionId } = await request.json();
+    const { message, conversationHistory, sessionId, messageId } = await request.json();
 
     if (!message) {
       return new Response(JSON.stringify({ error: 'Message is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!messageId) {
+      return new Response(JSON.stringify({ error: 'Message ID is required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
@@ -119,33 +136,45 @@ export async function POST(request: NextRequest) {
       parts: [{ text: message }]
     });
 
-    // Use streaming
-    const response = await ai.models.generateContentStream({
-      model: 'gemini-3-flash-preview',
-      contents,
-      config: {
-        systemInstruction: SUNG_JAE_CONTEXT,
-        maxOutputTokens: 512,
-        temperature: 0.7,
-      }
-    });
-
-    // Create a readable stream for the response
+    // Create SSE stream for AI response
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          // Send initial message indicating streaming has started
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'start', messageId })}\n\n`));
+
+          // Generate AI response with streaming
+          const response = await ai.models.generateContentStream({
+            model: 'gemini-3-flash-preview',
+            contents,
+            config: {
+              systemInstruction: SUNG_JAE_CONTEXT,
+              maxOutputTokens: 512,
+              temperature: 0.7,
+            }
+          });
+
+          let fullText = '';
+          
+          // Stream chunks as they arrive
           for await (const chunk of response) {
             const text = chunk.text;
             if (text) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
+              fullText += text;
+              // Send each chunk via SSE
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', messageId, text })}\n\n`));
             }
           }
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+
+          // Send completion message with full text
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'complete', messageId, text: fullText })}\n\n`));
           controller.close();
         } catch (error) {
-          console.error('Streaming error:', error);
-          controller.error(error);
+          console.error('AI streaming error:', error);
+          // Send error message
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', messageId, error: 'Failed to generate response' })}\n\n`));
+          controller.close();
         }
       }
     });
@@ -156,7 +185,6 @@ export async function POST(request: NextRequest) {
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
         'X-Accel-Buffering': 'no',
-        'Transfer-Encoding': 'chunked',
       }
     });
   } catch (error) {
@@ -167,3 +195,4 @@ export async function POST(request: NextRequest) {
     });
   }
 }
+

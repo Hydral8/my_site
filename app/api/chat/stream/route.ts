@@ -28,7 +28,42 @@ export async function GET(request: NextRequest) {
     return new Response('SessionID is required', { status: 400 });
   }
 
-  // Create SSE stream
+  // AI chat is transient - don't stream from Redis
+  if (isAI) {
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        const sendEvent = (data: any) => {
+          try {
+            const message = `data: ${JSON.stringify(data)}\n\n`;
+            controller.enqueue(encoder.encode(message));
+          } catch (e) {
+            // Stream closed
+          }
+        };
+        sendEvent({ type: 'connected', message: 'AI chat stream connected (transient)' });
+        // Send keepalive periodically
+        const interval = setInterval(() => {
+          sendEvent({ type: 'keepalive' });
+        }, 30000);
+        // Clean up on cancel
+        return () => clearInterval(interval);
+      },
+      cancel() {
+        // Stream cancelled
+      },
+    });
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
+    });
+  }
+
+  // Create SSE stream for real user conversations
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();

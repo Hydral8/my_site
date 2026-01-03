@@ -247,48 +247,16 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
   const userChatMessages = userChatData?.messages || []
 
   // Load messages for AI chat (conversation id 2)
-  // Uses sync endpoint for incremental updates, load endpoint for initial load
+  // AI chat is transient - only stored in client-side state, not in Redis
   const { data: aiChatData } = useQuery<MessagesData>({
     queryKey: ['messages', sessionId, '2', true],
-    queryFn: async ({ queryKey, signal }) => {
+    queryFn: async ({ queryKey }) => {
       if (!sessionId) return { messages: [], cursor: null }
       
-      // Get previous data to merge with
+      // AI chat is transient - return empty (not loaded from Redis)
+      // Messages are only stored in client-side React Query cache
       const previousData = queryClient.getQueryData<MessagesData>(queryKey)
-      const previousMessages = previousData?.messages || []
-      const currentCursor = aiChatCursor || previousData?.cursor || null
-      
-      let response: Response
-      if (currentCursor) {
-        // Use sync endpoint for incremental updates
-        response = await fetch(`/api/chat/sync?sessionId=${sessionId}&isAI=true&cursor=${currentCursor}`, { signal })
-      } else {
-        // First load - use load endpoint
-        response = await fetch(`/api/chat/load?sessionId=${sessionId}&isAI=true`, { signal })
-      }
-      
-      if (!response.ok) return { messages: previousMessages, cursor: currentCursor }
-      
-      const data = await response.json()
-      if (data.success) {
-        const newMessages = data.messages ? convertToWebFormat(data.messages) : []
-        
-        // Merge with previous messages (deduplicate by id)
-        const existingIds = new Set(previousMessages.map((m: Message) => m.id))
-        const uniqueNewMessages = newMessages.filter((m: Message) => !existingIds.has(m.id))
-        const allMessages = deduplicateMessages([...previousMessages, ...uniqueNewMessages])
-        
-        // Get cursor from response or from last message
-        const cursor = data.cursor || (newMessages.length > 0 && data.messages?.[data.messages.length - 1]?.streamId) || currentCursor
-        
-        // Update cursor state
-        if (cursor && cursor !== aiChatCursor) {
-          setAiChatCursor(cursor)
-        }
-        
-        return { messages: allMessages, cursor }
-      }
-      return { messages: previousMessages, cursor: currentCursor }
+      return previousData || { messages: [], cursor: null }
     },
     enabled: !!sessionId && isActive,
     // No refetchInterval - SSE handles real-time updates
@@ -317,19 +285,19 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
       const uniqueInitialMessages = initialMessages.filter(m => !existingIds.has(m.id))
       return deduplicateMessages([...redisMessages, ...uniqueInitialMessages])
     } else if (selectedConversation.id === 2 && selectedConversation.isAI) {
-      // Merge initial messages with Redis messages
+      // AI chat is transient - only use client-side cache (no Redis)
       const initialMessages = selectedConversation.messages || []
-      const redisMessages = aiChatMessages || []
+      const cachedMessages = aiChatMessages || []
       
-      // If Redis is empty, use initial messages
-      if (redisMessages.length === 0) {
+      // Merge initial messages with cached messages (from client-side state only)
+      if (cachedMessages.length === 0) {
         return deduplicateMessages(initialMessages)
       }
       
-      // Merge and deduplicate (Redis messages take precedence)
-      const existingIds = new Set(redisMessages.map(m => m.id))
+      // Merge and deduplicate (cached messages take precedence)
+      const existingIds = new Set(cachedMessages.map(m => m.id))
       const uniqueInitialMessages = initialMessages.filter(m => !existingIds.has(m.id))
-      return deduplicateMessages([...redisMessages, ...uniqueInitialMessages])
+      return deduplicateMessages([...cachedMessages, ...uniqueInitialMessages])
     }
     return selectedConversation.messages
   }, [selectedConversation.id, selectedConversation.isAI, selectedConversation.messages, userChatMessages, aiChatMessages, deduplicateMessages])
@@ -450,57 +418,8 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
 
     eventSources.push(userChatStream)
 
-    // Connect to AI chat stream
-    const aiChatStream = new EventSource(
-      `/api/chat/stream?sessionId=${sessionId}&isAI=true`
-    )
-
-    aiChatStream.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        
-        if (data.type === 'message' && data.message) {
-          // Update cache directly instead of invalidating (more efficient)
-          const queryKey = ['messages', sessionId, '2', true]
-          const currentData = queryClient.getQueryData<MessagesData>(queryKey)
-          
-          if (currentData) {
-            const msg = data.message
-            const webMessage: Message = {
-              id: parseInt(msg.id, 10),
-              text: msg.text,
-              sender: msg.sender === 'contact' ? 'visitor' : 'me',
-              timestamp: new Date(msg.timestamp),
-              status: msg.status || 'sent',
-            }
-            
-            // Check if message already exists (deduplicate)
-            const existingIds = new Set(currentData.messages.map(m => m.id))
-            if (!existingIds.has(webMessage.id)) {
-              const updatedMessages = deduplicateMessages([...currentData.messages, webMessage])
-              const cursor = msg.streamId || currentData.cursor
-              
-              queryClient.setQueryData<MessagesData>(queryKey, {
-                messages: updatedMessages,
-                cursor: cursor,
-              })
-            }
-          } else {
-            // If no cache, invalidate to trigger initial load
-            queryClient.invalidateQueries({ queryKey })
-          }
-        }
-      } catch (error) {
-        console.error('Error parsing SSE message:', error)
-      }
-    }
-
-    aiChatStream.onerror = (error) => {
-      console.error('SSE connection error (AI chat):', error)
-      // EventSource will automatically reconnect
-    }
-
-    eventSources.push(aiChatStream)
+    // AI chat is transient - no SSE connection needed since messages are only in client-side state
+    // AI responses come directly from /api/chat endpoint when user sends a message
 
     // Cleanup: close connections on unmount or when inactive
     return () => {
@@ -614,12 +533,27 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
     }
 
     // Optimistically update TanStack Query cache (shows immediately)
-    // Then save to Redis in background
-    saveMessagesMutation.mutate({
-      conversationId: selectedConversation.id,
-      message: newMessage,
-      isAI: selectedConversation.isAI || false,
-    })
+    // Then save to Redis in background (only for non-AI conversations)
+    if (!selectedConversation.isAI) {
+      saveMessagesMutation.mutate({
+        conversationId: selectedConversation.id,
+        message: newMessage,
+        isAI: false,
+      })
+    } else {
+      // For AI chat, just add to client-side cache (no Redis save - AI chat is transient)
+      const queryKey = ['messages', sessionId, selectedConversation.id.toString(), true]
+      const currentData = queryClient.getQueryData<MessagesData>(queryKey)
+      if (currentData) {
+        const existingIds = new Set(currentData.messages.map(m => m.id))
+        if (!existingIds.has(newMessage.id)) {
+          queryClient.setQueryData<MessagesData>(queryKey, {
+            messages: deduplicateMessages([...currentData.messages, newMessage]),
+            cursor: currentData.cursor,
+          })
+        }
+      }
+    }
 
     setInputValue('')
     
@@ -719,7 +653,8 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
         // Get sessionId for tracking
         const sessionId = getStoredSessionId()
         
-        const response = await fetch('/api/chat', {
+        // Use SSE for streaming AI responses
+        const response = await fetch('/api/chat/ai-stream', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -727,7 +662,8 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
           body: JSON.stringify({
             message: messageText,
             conversationHistory,
-            sessionId // Include sessionId for push notification routing
+            sessionId, // Include sessionId for push notification routing
+            messageId: aiMessageId.toString(), // Include messageId for tracking
           })
         })
         
@@ -735,9 +671,9 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
           throw new Error('Failed to get AI response')
         }
         
+        // Read SSE stream - process chunks immediately as they arrive
         const reader = response.body?.getReader()
         const decoder = new TextDecoder()
-        let fullText = ''
         let buffer = ''
         
         if (reader) {
@@ -745,41 +681,84 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
             const { done, value } = await reader.read()
             if (done) break
             
-            // Decode immediately without waiting
+            // Decode chunk immediately
             buffer += decoder.decode(value, { stream: true })
             
-            // Process complete lines
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || '' // Keep incomplete line in buffer
-            
-            for (const line of lines) {
-              const trimmedLine = line.trim()
+            // Process all complete SSE messages (separated by \n\n)
+            // Process as many as we can to avoid buffering delays
+            while (buffer.includes('\n\n')) {
+              const messageEnd = buffer.indexOf('\n\n')
+              const message = buffer.slice(0, messageEnd)
+              buffer = buffer.slice(messageEnd + 2) // Remove processed message
+              
+              const trimmedLine = message.trim()
               if (trimmedLine.startsWith('data: ')) {
                 const data = trimmedLine.slice(6)
-                if (data === '[DONE]') continue
                 
                 try {
                   const parsed = JSON.parse(data)
-                  if (parsed.text) {
-                    fullText += parsed.text
+                  const queryKey = ['messages', sessionId, selectedConversation.id.toString(), selectedConversation.isAI || false]
+                  const currentData = queryClient.getQueryData<MessagesData>(queryKey)
+                  
+                  if (!currentData) continue
+                  
+                  if (parsed.type === 'start') {
+                    // Streaming started - message already exists
+                    continue
+                  } else if (parsed.type === 'chunk' && parsed.text) {
+                    // Update message with new chunk immediately
+                    // Server sends fullText (accumulated) - use that if available, otherwise append chunk
+                    const existingText = currentData.messages.find(m => m.id === aiMessageId)?.text || ''
+                    const textToUse = parsed.fullText !== undefined 
+                      ? parsed.fullText  // Use server's accumulated text (most reliable)
+                      : existingText + parsed.text  // Fallback: append chunk
                     
-                    // Update the streaming message immediately in TanStack Query cache
-                    const queryKey = ['messages', sessionId, selectedConversation.id.toString(), selectedConversation.isAI || false]
-                    const currentData = queryClient.getQueryData<MessagesData>(queryKey)
+                    // Debug: log first few chunks to see timing
+                    if (textToUse.length < 50) {
+                      console.log(`[AI Frontend] Chunk received: delta="${parsed.text.substring(0, 20)}..." fullLength=${textToUse.length}`)
+                    }
                     
-                    if (currentData) {
-                      queryClient.setQueryData<MessagesData>(queryKey, {
-                        ...currentData,
-                        messages: currentData.messages.map(msg =>
-                            msg.id === aiMessageId 
-                              ? { ...msg, text: fullText }
-                              : msg
-                          ),
-                      })
-                        }
+                    // Update immediately for real-time streaming
+                    queryClient.setQueryData<MessagesData>(queryKey, {
+                      ...currentData,
+                      messages: currentData.messages.map(msg =>
+                        msg.id === aiMessageId 
+                          ? { ...msg, text: textToUse }
+                          : msg
+                      ),
+                    })
+                  } else if (parsed.type === 'complete' && parsed.text) {
+                    // Streaming complete - set final text and mark as delivered
+                    queryClient.setQueryData<MessagesData>(queryKey, {
+                      ...currentData,
+                      messages: currentData.messages.map(msg =>
+                        msg.id === aiMessageId 
+                          ? { ...msg, text: parsed.text, status: 'delivered' as const }
+                          : msg
+                      ),
+                    })
+                  } else if (parsed.type === 'error') {
+                    // Error occurred
+                    const errorMessage: Message = {
+                      id: aiMessageId,
+                      text: "Sorry, I'm having trouble connecting right now. Please try again in a moment!",
+                      sender: 'me',
+                      timestamp: new Date(),
+                      status: 'delivered'
+                    }
+                    
+                    queryClient.setQueryData<MessagesData>(queryKey, {
+                      ...currentData,
+                      messages: currentData.messages.map(msg =>
+                        msg.id === aiMessageId
+                          ? errorMessage
+                          : msg
+                      ),
+                    })
                   }
-                } catch {
+                } catch (error) {
                   // Ignore parse errors for incomplete JSON
+                  console.warn('Error parsing SSE message:', error, data)
                 }
               }
             }
@@ -788,57 +767,24 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
           // Process any remaining buffer
           if (buffer.trim().startsWith('data: ')) {
             const data = buffer.trim().slice(6)
-            if (data !== '[DONE]') {
-              try {
-                const parsed = JSON.parse(data)
-                if (parsed.text) {
-                  fullText += parsed.text
-                  
-                  // Update streaming message in TanStack Query cache
-                  const queryKey = ['messages', sessionId, selectedConversation.id.toString(), selectedConversation.isAI || false]
-                  const currentData = queryClient.getQueryData<MessagesData>(queryKey)
-                  
-                  if (currentData) {
-                    queryClient.setQueryData<MessagesData>(queryKey, {
-                      ...currentData,
-                      messages: currentData.messages.map(msg =>
-                        msg.id === aiMessageId
-                          ? { ...msg, text: fullText }
-                          : msg
-                      ),
-                    })
-                  }
-                }
-              } catch {
-                // Ignore
+            try {
+              const parsed = JSON.parse(data)
+              const queryKey = ['messages', sessionId, selectedConversation.id.toString(), selectedConversation.isAI || false]
+              const currentData = queryClient.getQueryData<MessagesData>(queryKey)
+              
+              if (currentData && parsed.type === 'complete' && parsed.text) {
+                queryClient.setQueryData<MessagesData>(queryKey, {
+                  ...currentData,
+                  messages: currentData.messages.map(msg =>
+                    msg.id === aiMessageId 
+                      ? { ...msg, text: parsed.text, status: 'delivered' as const }
+                      : msg
+                  ),
+                })
               }
+            } catch {
+              // Ignore
             }
-          }
-        }
-        
-        // Mark message as delivered and save to Redis
-        const queryKey = ['messages', sessionId, selectedConversation.id.toString(), selectedConversation.isAI || false]
-        const currentData = queryClient.getQueryData<MessagesData>(queryKey)
-        
-        if (currentData) {
-          const finalMessage = currentData.messages.find(m => m.id === aiMessageId)
-          if (finalMessage) {
-            // Update status to delivered
-            queryClient.setQueryData<MessagesData>(queryKey, {
-              ...currentData,
-              messages: currentData.messages.map(msg =>
-                msg.id === aiMessageId 
-                  ? { ...msg, status: 'delivered' as const }
-                  : msg
-              ),
-            })
-            
-            // Save to Redis via mutation
-            saveMessagesMutation.mutate({
-              conversationId: selectedConversation.id,
-              message: { ...finalMessage, status: 'delivered' },
-              isAI: selectedConversation.isAI || false,
-            })
           }
         }
         
@@ -866,13 +812,7 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
                 : msg
             ),
           })
-          
-          // Save to Redis via mutation even on error
-          saveMessagesMutation.mutate({
-            conversationId: selectedConversation.id,
-            message: errorMessage,
-            isAI: selectedConversation.isAI || false,
-          })
+          // AI chat is transient - not saved to Redis
         }
       } finally {
         setIsAILoading(false)

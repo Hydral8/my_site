@@ -41,14 +41,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Read messages from stream
+    // Read messages from stream (AI chat is transient - return empty)
+    let messages: any[] = [];
+    let latestStreamId: string | null = useCursor;
     const convId = isAI ? '2' : (conversationId || '1');
-    const { messages, latestStreamId } = await readMessagesFromStream(
-      sessionId,
-      convId,
-      isAI,
-      useCursor
-    );
+    
+    if (!isAI) {
+      const result = await readMessagesFromStream(
+        sessionId,
+        convId,
+        false,
+        useCursor
+      );
+      messages = result.messages;
+      latestStreamId = result.latestStreamId;
+    }
 
     // Format messages in unified format
     const formattedMessages = messages.map((msg) => ({
@@ -70,8 +77,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Update cursor if deviceId provided
-    if (deviceId && latestStreamId && latestStreamId !== useCursor) {
+    // Update cursor if deviceId provided (only for non-AI conversations)
+    if (!isAI && deviceId && latestStreamId && latestStreamId !== useCursor) {
       await setCursor(deviceId, sessionId, convId, latestStreamId);
     }
 

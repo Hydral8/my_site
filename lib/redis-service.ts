@@ -714,31 +714,7 @@ export async function getAllConversations(): Promise<Array<{
         }
       } while (cursor !== '0');
 
-      // Scan for all AI stream keys (stream:conv:ai:*)
-      cursor = '0';
-      do {
-        const result = await client.scan(cursor, {
-          MATCH: `${STREAM_AI_PREFIX}*`,
-          COUNT: 100,
-        });
-        cursor = result.cursor;
-        
-        for (const key of result.keys) {
-          // Parse key: stream:conv:ai:{sessionId}
-          const sessionId = key.replace(STREAM_AI_PREFIX, '');
-          const messages = await readAllMessagesFromStream(sessionId, '2', true);
-          if (messages.length > 0) {
-            conversations.push({
-              sessionId,
-              conversationId: '2', // AI conversations always have ID 2
-              isAI: true,
-              messages,
-              lastMessage: messages[messages.length - 1],
-              updatedAt: messages[messages.length - 1]?.timestamp,
-            });
-          }
-        }
-      } while (cursor !== '0');
+      // Skip AI conversations - they are transient and not stored in Redis
 
       return conversations;
     });
