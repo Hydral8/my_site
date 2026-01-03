@@ -375,6 +375,15 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
       try {
         const data = JSON.parse(event.data)
         
+        if (data.type === 'reconnect') {
+          // Server is asking us to reconnect (serverless timeout)
+          // Close current connection and let EventSource auto-reconnect
+          console.log('SSE reconnect requested by server:', data.message)
+          userChatStream.close()
+          // EventSource will automatically reconnect after a short delay
+          return
+        }
+        
         if (data.type === 'message' && data.message) {
           // Update cache directly instead of invalidating (more efficient)
           const queryKey = ['messages', sessionId, '1', false]

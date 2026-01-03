@@ -1,6 +1,9 @@
 import { GoogleGenAI } from '@google/genai';
 import { NextRequest } from 'next/server';
 
+// Node.js is the default runtime, no need to explicitly set it
+// maxDuration defaults to 10s on Hobby plan, which is sufficient
+
 // System prompt with comprehensive information about Sung Jae
 const SUNG_JAE_CONTEXT = `You are an AI digital twin of Sung Jae Bae. You should respond as if you ARE Sung Jae, speaking in first person. Be friendly, professional, and authentic.
 
@@ -74,6 +77,18 @@ My goal is to build world-changing products that meaningfully change how people 
 
 Keep responses short and concise. Try to keep responses under 100 words, messaging style.
 `;
+
+// Handle OPTIONS for CORS preflight
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { setSession } from '@/lib/redis-service';
 
+// Node.js is the default runtime, no need to explicitly set it
+// maxDuration defaults to 10s on Hobby plan, which is sufficient
+
 // Generate a unique session ID
 function generateSessionId(): string {
   return randomBytes(16).toString('hex');

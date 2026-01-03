@@ -57,9 +57,10 @@ export async function redisSet(
   ttlSeconds: number
 ): Promise<boolean> {
   try {
-    const client = await getRedisClient();
-    await client.setEx(key, ttlSeconds, value);
-    return true;
+    return await withRedisClient(async (client) => {
+      await client.setEx(key, ttlSeconds, value);
+      return true;
+    });
   } catch (error) {
     console.error('Redis set error:', error);
     return false;
@@ -69,9 +70,10 @@ export async function redisSet(
 // Get a value by key
 export async function redisGet(key: string): Promise<string | null> {
   try {
-    const client = await getRedisClient();
-    const result = await client.get(key);
-    return result || null;
+    return await withRedisClient(async (client) => {
+      const result = await client.get(key);
+      return result || null;
+    });
   } catch (error) {
     console.error('Redis get error:', error);
     return null;
@@ -81,9 +83,10 @@ export async function redisGet(key: string): Promise<string | null> {
 // Delete a key
 export async function redisDelete(key: string): Promise<boolean> {
   try {
-    const client = await getRedisClient();
-    await client.del(key);
-    return true;
+    return await withRedisClient(async (client) => {
+      await client.del(key);
+      return true;
+    });
   } catch (error) {
     console.error('Redis delete error:', error);
     return false;
@@ -93,9 +96,10 @@ export async function redisDelete(key: string): Promise<boolean> {
 // Check if a key exists
 export async function redisExists(key: string): Promise<boolean> {
   try {
-    const client = await getRedisClient();
-    const result = await client.exists(key);
-    return result === 1;
+    return await withRedisClient(async (client) => {
+      const result = await client.exists(key);
+      return result === 1;
+    });
   } catch (error) {
     console.error('Redis exists error:', error);
     return false;

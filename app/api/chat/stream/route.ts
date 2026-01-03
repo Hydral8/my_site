@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { createClient } from 'redis';
 
+// Node.js is the default runtime, no need to explicitly set it
+// maxDuration defaults to 10s on Hobby plan, which is sufficient
+
 const STREAM_CONV_PREFIX = 'stream:conv:';
 const STREAM_AI_PREFIX = 'stream:conv:ai:';
 const READ_STATUS_PREFIX = 'read:status:';
@@ -111,18 +114,23 @@ export async function GET(request: NextRequest) {
           : `${STREAM_CONV_PREFIX}${sessionId}:${conversationId || '1'}`;
 
         let lastCursor = cursor === '$' ? '$' : cursor;
+        let iterationCount = 0;
+        const MAX_ITERATIONS = 3; // Max 3 iterations * 2.5s = 7.5s (safe for Hobby plan 10s limit)
+        const BLOCK_TIME = 2500; // 2.5 seconds - shorter for serverless compatibility
 
-        // Keep reading from stream
-        while (!isClosed) {
+        // Keep reading from stream (with iteration limit for serverless)
+        while (!isClosed && iterationCount < MAX_ITERATIONS) {
           try {
-            // Read from stream with blocking (wait up to 5 seconds for new messages)
+            // Read from stream with blocking (wait up to 2.5 seconds for new messages)
             // Using '$' means only new messages after this call
             const readCursor = lastCursor === '$' ? '$' : lastCursor;
             
             const result = await client.xRead(
               { key: streamKey, id: readCursor },
-              { COUNT: 100, BLOCK: 5000 } // Block for 5 seconds
+              { COUNT: 100, BLOCK: BLOCK_TIME } // Block for 2.5 seconds (serverless-friendly)
             );
+            
+            iterationCount++;
 
             if (result && Array.isArray(result) && result.length > 0) {
               const streamData = result[0] as { messages: Array<{ id: string; message: Record<string, string> }> };
@@ -160,6 +168,13 @@ export async function GET(request: NextRequest) {
               // No new messages (timeout), send keepalive
               // After timeout, continue with same cursor
               sendEvent({ type: 'keepalive' });
+            }
+            
+            // If we've hit max iterations, send a reconnect message and close
+            if (iterationCount >= MAX_ITERATIONS) {
+              sendEvent({ type: 'reconnect', message: 'Reconnecting due to serverless timeout' });
+              isClosed = true;
+              break;
             }
           } catch (readError: any) {
             // Handle timeout (expected when no new messages)
