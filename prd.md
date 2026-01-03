@@ -1,127 +1,206 @@
-# Sung Jae Personal Website — “Encrypted Reality”
+# PRD: macOS-Style Liquid Glass Display for Personal Website
 
 ## Overview
-A one-page personal website that begins as an **encrypted, interactive experience**.  
-Visitors encounter a visually rich, cryptic interface:
+Transform the personal website into an immersive macOS-style desktop experience with a liquid glass aesthetic (mimicking the modern macOS translucent UI). The experience begins encrypted/locked and progressively unlocks through interactive elements.
 
-- All text rapidly cycles through random glyphs, unreadable at first.  
-- A small **moving “bug”** crawls across the screen.  
-- The user must **“squash”** the bug with their paddle (cursor mechanic).  
-- Once caught, the site **progressively decodes** — text resolves into readable content, visuals stabilize, and Sung Jae’s story, projects, and links are revealed.
+## Core Concept
+A virtual macOS desktop that serves as a portfolio interface where:
+- Each application represents different sections of personal information
+- The desktop has a liquid glass/frosted glass aesthetic with glassmorphism effects
+- Content begins encrypted and unlocks through interactive engagement (bug catching game)
+- Applications can be clicked to open "windows" displaying portfolio content
 
-**Vibe:** futuristic, dev-aesthetic, sleek, mysterious — not “terminal” style, but more like a **tech art installation**.  
-**Background:** deep black-charcoal gradient with soft cyan and magenta highlights.  
-**Structure:** single scrolling page divided into sections that appear as content decodes.
+## Technical Architecture
 
----
+### Phase 1: macOS Desktop Foundation
+**Components to Create:**
+- `MacOSDesktop.tsx` - Main desktop container with wallpaper and dock
+- `DockBar.tsx` - Bottom dock with app icons (Finder, About, Projects, Contact, etc.)
+- `MenuBar.tsx` - Top menu bar with time, system icons, and user name
+- `Window.tsx` - Draggable, resizable window component with glassmorphism
+- `WindowManager.tsx` - Context for managing open windows, z-index, minimize/maximize
 
-## Goals
-- Create a **unique, interactive identity** experience.  
-- Evoke curiosity and discovery before revealing information.  
-- Keep **everything on one page** for the first version.  
-- Build with **Next.js** to allow future expansion (routing, SEO, API routes).
+**Design System:**
+- Glassmorphism effects: `backdrop-blur`, semi-transparent backgrounds
+- macOS-accurate animations: smooth scale, fade, and slide transitions
+- Color palette: Translucent panels, subtle gradients, cyan/purple accents
+- Typography: System font stack (SF Pro-like), monospace for code
 
----
+### Phase 2: Application Windows
+**Applications to Build:**
 
-## Core Experience Flow
+1. **Finder.app** - File browser showing portfolio structure
+   - Displays "folders" for different life areas (Work, Education, Projects, etc.)
+   - Clicking folders reveals timeline/journey content from About section
 
-| Phase | Description | Interaction |
-|-------|--------------|-------------|
-| **1. Obfuscation** | Page loads; all text rapidly scrambles between random glyphs. A glowing bug roams the screen. | Mouse/touch paddle follows user input. |
-| **2. Discovery** | Bug reacts to proximity, dodging slightly to make the interaction feel alive. | User must “squash” the bug (collision detection). |
-| **3. Unlock** | On collision, play particle explosion + glitch animation. Begin decoding text gradually (5%/100ms). | Staggered character morph + fade-in. |
-| **4. Reveal** | All content becomes visible and stable; sections smoothly appear as user scrolls. | Normal scrolling and hover interactions enabled. |
+2. **About.app** - Terminal-style window showing bio and journey
+   - Animated text decode effect
+   - Timeline visualization with company/role information
+   - Links to company websites
 
----
+3. **Projects.app** - Grid view of project cards
+   - Card-based layout with hover effects
+   - Tech stack tags
+   - Expandable descriptions
+   - External links to live projects
 
-## Visual Design
+4. **Contact.app** - Contact form or social links display
+   - Social media icons grid
+   - Email contact
+   - Animated link cards
 
-### Color Palette
-- **Background:** `#0B0B0D → #111` gradient  
-- **Accents:**  
-  - Cyan `#00F5D4`  
-  - Purple `#A29BFE`  
-  - Soft white `#EAEAEA`  
-- **Bug Glow:** neon magenta ↔ green cycling glow
+5. **Terminal.app** - Interactive terminal with easter eggs
+   - Can run commands to reveal hidden content
+   - Shows system "stats" (fun facts about the individual)
+   - ASCII art elements
 
-### Typography
-- **Primary:** `Inter` or `Space Grotesk`  
-- **Encoded Font:** `JetBrains Mono` or `IBM Plex Mono`
+6. **Gallery.app** (Future) - Photo/media gallery
+   - Screenshots, demos, visual work
 
-### Animation Feel
-- Smooth and elegant, not chaotic.  
-- Character morph decode → fade transition (Framer Motion staggered).  
-- Subtle parallax or chromatic flicker on hover.  
-- Canvas-based bug animation overlays the rest of the page.
+### Phase 3: Initial Experience
+**Clean macOS Boot:**
+- Desktop loads with smooth fade-in animation
+- Wallpaper renders with subtle parallax/gradient
+- Dock icons animate in with sequential spring effect
+- Menu bar fades in elegantly
+- Optional: Welcome notification appears bottom-right
 
----
+**Load States:**
+- **Loading:** Smooth fade from dark to desktop
+- **Ready:** Full glassmorphism, all apps clickable, vibrant colors
 
-## Sections (All on One Page)
+### Phase 4: Interactions & Polish
+**User Interactions:**
+- Draggable windows with smooth momentum
+- Minimize to dock with genie effect
+- Maximize/fullscreen windows
+- Close windows with fade animation
+- Dock magnification on hover
+- Right-click context menus (optional)
+- Keyboard shortcuts (Cmd+W to close, Cmd+M to minimize, etc.)
 
-### 🧠 About / History
-Brief scrolling timeline:
-- RocLab → Remote Roofing → Magi → Queue → Meural → SKMC pivot  
-- Render as a horizontal timeline or animated vertical stack that appears as decoding completes.
+**Animations:**
+- Window open: Scale from dock icon with spring
+- Window close: Scale back to dock with momentum
+- Dock hover: Icon magnification with neighboring icons affected
+- App launch: Bounce effect on dock icon
+- Desktop unlock: Cascading blur removal with particle effects
 
-### 🚀 Projects
-Grid or carousel of project cards:
-- Each card shows: thumbnail, short tagline, optional “more” expansion.  
-- Hover → 3D tilt, glitch ripple on edges.
+## Data Structure
 
-### 📡 Contact / Socials
-Footer area:
-- Icons for GitHub, X/Twitter, LinkedIn, Magi, Email.  
-- Subtle glowing hover and fade-in animation when revealed.
+### Window State
+```typescript
+interface WindowState {
+  id: string
+  appId: string
+  title: string
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  isMinimized: boolean
+  isMaximized: boolean
+  zIndex: number
+  isClosable: boolean
+}
+```
 
----
+### App Definition
+```typescript
+interface AppDefinition {
+  id: string
+  name: string
+  icon: string | ReactNode
+  component: ComponentType<any>
+  defaultSize: { width: number; height: number }
+  minSize?: { width: number; height: number }
+  resizable: boolean
+}
+```
 
-## Technical Implementation
+## File Structure
+```
+components/
+  macos/
+    MacOSDesktop.tsx
+    MenuBar.tsx
+    DockBar.tsx
+    Window.tsx
+    WindowManager.tsx
+    apps/
+      Finder.tsx
+      AboutApp.tsx
+      ProjectsApp.tsx
+      ContactApp.tsx
+      TerminalApp.tsx
+  shared/
+    GlassCard.tsx
+    ScrollDecodedText.tsx (existing)
+    ScrambledText.tsx (existing)
+hooks/
+  useBugGame.ts (existing)
+  useWindowManager.ts
+  useDraggable.ts
+  useResizable.ts
+styles/
+  glassmorphism.css
+types/
+  macos.ts
+```
 
-| Component | Approach |
-|------------|-----------|
-| **Framework** | **Next.js (App Router)** for long-term flexibility, SEO, and deployment simplicity. |
-| **Styling** | Tailwind CSS for rapid prototyping and consistent design. |
-| **Animation** | Framer Motion + custom Canvas layer for the bug/paddle system. |
-| **Scramble Effect** | Custom React hook cycling characters (setInterval or requestAnimationFrame). |
-| **Decode Effect** | Character morphing using Framer Motion staggered transitions. |
-| **Bug Mechanic** | requestAnimationFrame loop; collision detection via simple circle or bounding-box logic. |
-| **Audio (Optional)** | Bitcrushed “glitch” sound cue for bug hit. |
-| **Deployment** | Vercel static build (Next.js export or standard App Router deploy). |
+## Design Tokens
 
----
+### Colors
+- Primary glass: `rgba(255, 255, 255, 0.15)`
+- Dark glass: `rgba(0, 0, 0, 0.3)`
+- Accent cyan: `#00F5D4`
+- Accent purple: `#B26DFF`
+- Border: `rgba(255, 255, 255, 0.2)`
 
-## MVP Scope (Single Page)
-✅ Encrypted landing with scrambling text  
-✅ Interactive bug and paddle mechanic  
-✅ Gradual decoding sequence revealing all content  
-✅ One-page layout: About → Projects → Contact  
-✅ Responsive dark theme with minimal framer-motion transitions  
+### Blur Levels
+- Desktop locked: `blur(20px)`
+- Desktop unlocked: `blur(0px)`
+- Window glass: `backdrop-blur(40px)`
+- Heavy glass: `backdrop-blur(60px)`
 
----
+### Animations
+- Spring: `{ type: "spring", stiffness: 300, damping: 25 }`
+- Smooth: `{ duration: 0.3, ease: [0.4, 0.0, 0.2, 1] }`
+- Bounce: `{ type: "spring", stiffness: 400, damping: 10 }`
+
+## Content Mapping
+
+### Existing Content → Apps
+- **Hero Section** → Desktop wallpaper + initial encrypted state
+- **About/Journey** → Finder.app + About.app
+- **Projects** → Projects.app
+- **Contact** → Contact.app
+- **Bug Game** → Unlock mechanism
+
+## MCP Servers Needed
+
+You may want to consider these MCP servers:
+1. **@modelcontextprotocol/server-filesystem** - If you need to read/write config files or manage assets
+2. **@modelcontextprotocol/server-fetch** - If integrating external APIs for dynamic content
+3. **Custom MCP for portfolio data** - Could serve project data, blog posts, or other dynamic content
+
+Note: These are optional. Current implementation can work entirely with local files and components.
+
+## Success Criteria
+- [ ] Desktop looks and feels like macOS with liquid glass aesthetic
+- [ ] All existing content is accessible through app windows
+- [ ] Bug game successfully unlocks the experience with dramatic effect
+- [ ] Windows are draggable, resizable, and feel responsive
+- [ ] Dock and menu bar behave like macOS
+- [ ] Glassmorphism effects work across all components
+- [ ] Mobile responsive (fallback to simplified view)
+- [ ] Performance: 60fps animations, smooth interactions
+- [ ] Accessibility: Keyboard navigation, screen reader support
 
 ## Future Enhancements
-- Add **multi-stage unlocks** (e.g., multiple bugs = reveal new sections).  
-- Layered **3D transitions** post-unlock (e.g., “world reveal” fold-out).  
-- “Quantum” text effect for your name (letters vibrate before stabilizing).  
-- Add **/blog**, **/writing**, or **/press** pages later — easy with Next.js routing.  
-- Magnetic hover and “lens distortion” effects for cards.
-
----
-
-## Rapid Timeline
-| Day | Deliverable |
-|-----|--------------|
-| **Day 1** | Next.js + Tailwind setup, scrambled text prototype |
-| **Day 2** | Bug canvas with movement + collision logic |
-| **Day 3** | Decode animation + staged reveal of content |
-| **Day 4** | Layout polish, typography, content filling |
-| **Day 5** | Final styling, responsiveness, deploy to Vercel |
-
----
-
-## Summary
-A **one-page encrypted portal** that feels alive —  
-Visitors “unlock” Sung Jae’s world through action and curiosity.  
-Built for performance and expandability using **Next.js**, ready to evolve into a multi-page portfolio.
-
----
+- Blog.app for articles/writing
+- Music.app with Spotify integration
+- Photos.app for visual portfolio
+- Settings.app for theme customization
+- Multiple desktop workspaces
+- Widgets on desktop
+- Notification system
+- Spotlight-style search (Cmd+Space)

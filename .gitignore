@@ -24,6 +24,8 @@ yarn-error.log*
 
 # local env files
 .env*.local
+*.env
+!.env.example
 
 # vercel
 .vercel
@@ -31,3 +33,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# push token storage
+data/push-token.json

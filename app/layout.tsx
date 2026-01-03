@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
+import { QueryProvider } from '@/lib/query-client'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -15,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Sung Jae Bae - Encrypted Reality',
+  title: 'Personal Website',
   description: 'Interactive personal website of Sung Jae Bae - Unlock the experience',
   keywords: ['developer', 'portfolio', 'interactive', 'web experience'],
 }
@@ -28,7 +29,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="font-sans antialiased">
-        {children}
+        <QueryProvider>
+          {children}
+        </QueryProvider>
       </body>
     </html>
   )
