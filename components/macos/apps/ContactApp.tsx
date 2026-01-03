@@ -3,6 +3,7 @@
 import { AppComponentProps } from '@/types/macos'
 import { useState, useMemo } from 'react'
 import { useDragHandler } from '../Window'
+import Image from 'next/image'
 
 interface Contact {
   id: number
@@ -39,7 +40,7 @@ const initialContacts: Contact[] = [
     color: 'bg-white',
     notes: 'Got some cool stuff here.',
     logo: (
-      <img src="/icons/github.png" alt="GitHub" className="w-8 h-8 object-contain" />
+      <Image src="/icons/github.png" alt="GitHub" width={32} height={32} className="object-contain" />
     ),
   },
   {
@@ -52,7 +53,7 @@ const initialContacts: Contact[] = [
     initials: 'LI',
     notes: 'Connect with me on LinkedIn',
     logo: (
-      <img src="/icons/linkedin.png" alt="LinkedIn" className="w-8 h-8 object-contain" />
+      <Image src="/icons/linkedin.png" alt="LinkedIn" width={32} height={32} className="object-contain" />
     ),
   },
   {

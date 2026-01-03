@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { AppComponentProps } from '@/types/macos'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useDragHandler } from '../Window'
+import Image from 'next/image'
 
 const projects = [
   {
@@ -477,10 +478,13 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
                   }}
                 >
-                  <img
+                  <Image
                     src={photo.src}
                     alt={photo.alt}
-                    className="w-full h-full object-cover"
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 33vw, 33vw"
+                    unoptimized={photo.src.endsWith('.png')}
                   />
                   {/* Overlay on hover */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200" />
@@ -506,10 +510,12 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                 {project.icon ? (
                   // Icon-based display
                   <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
-                    <img
+                    <Image
                       src={project.icon}
                       alt={project.title}
-                      className={project.title === 'RocLab' ? 'w-28 h-28 object-contain mb-2' : 'w-16 h-16 object-contain mb-4'}
+                      width={project.title === 'RocLab' ? 112 : 64}
+                      height={project.title === 'RocLab' ? 112 : 64}
+                      className={`${project.title === 'RocLab' ? 'mb-2' : 'mb-4'} object-contain`}
                     />
                     {project.title === 'RocLab' ? (
                       <p className="text-xs text-center text-gray-900 font-medium">
@@ -578,11 +584,18 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                   <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
-              <img
-                src={selectedPhoto.src}
-                alt={selectedPhoto.alt}
-                className="w-full h-auto rounded-lg shadow-2xl"
-              />
+              <div className="relative w-full rounded-lg shadow-2xl overflow-hidden">
+                <Image
+                  src={selectedPhoto.src}
+                  alt={selectedPhoto.alt}
+                  width={1920}
+                  height={1080}
+                  className="w-full h-auto rounded-lg"
+                  sizes="(max-width: 768px) 100vw, 80vw"
+                  priority
+                  unoptimized={selectedPhoto.src.endsWith('.png')}
+                />
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -633,10 +646,12 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                     <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
                       {selectedProject.icon ? (
                         <>
-                          <img
+                          <Image
                             src={selectedProject.icon}
                             alt={selectedProject.title}
-                            className={selectedProject.title === 'RocLab' ? 'w-48 h-48 object-contain mb-4' : 'w-32 h-32 object-contain mb-6'}
+                            width={selectedProject.title === 'RocLab' ? 192 : 128}
+                            height={selectedProject.title === 'RocLab' ? 192 : 128}
+                            className={`${selectedProject.title === 'RocLab' ? 'mb-4' : 'mb-6'} object-contain`}
                           />
                           {selectedProject.title === 'RocLab' ? (
                             <p className="text-sm font-medium text-gray-900">
@@ -727,10 +742,12 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                               className="flex items-center gap-3 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-lg transition-all group"
                             >
                               {subproject.icon && (
-                                <img
+                                <Image
                                   src={subproject.icon}
                                   alt={subproject.name}
-                                  className="w-10 h-10 object-contain"
+                                  width={40}
+                                  height={40}
+                                  className="object-contain"
                                 />
                               )}
                               <div className="flex flex-col">
@@ -786,11 +803,16 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                             loading="lazy"
                           />
                         ) : (selectedProject as any).screenshot ? (
-                          <img
-                            src={(selectedProject as any).screenshot}
-                            alt={`${selectedProject.title} screenshot`}
-                            className="w-full h-auto object-contain"
-                          />
+                          <div className="relative w-full">
+                            <Image
+                              src={(selectedProject as any).screenshot}
+                              alt={`${selectedProject.title} screenshot`}
+                              width={1920}
+                              height={1080}
+                              className="w-full h-auto object-contain"
+                              sizes="(max-width: 768px) 100vw, 80vw"
+                            />
+                          </div>
                         ) : null}
                       </div>
                     )}
