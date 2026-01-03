@@ -484,7 +484,6 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
                     fill
                     className="object-cover"
                     sizes="(max-width: 768px) 33vw, 33vw"
-                    unoptimized={photo.src.endsWith('.png')}
                   />
                   {/* Overlay on hover */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200" />
@@ -574,26 +573,25 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="max-w-6xl w-full relative"
+              className="max-w-4xl w-full max-h-[90vh] relative flex flex-col"
             >
               <button
                 onClick={() => setSelectedPhoto(null)}
-                className="absolute -top-12 right-0 text-white/60 hover:text-white transition-colors"
+                className="absolute -top-12 right-0 text-white/60 hover:text-white transition-colors z-10"
               >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                   <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
-              <div className="relative w-full rounded-lg shadow-2xl overflow-hidden">
+              <div className="relative w-full max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex items-center justify-center bg-black/20">
                 <Image
                   src={selectedPhoto.src}
                   alt={selectedPhoto.alt}
                   width={1920}
                   height={1080}
-                  className="w-full h-auto rounded-lg"
-                  sizes="(max-width: 768px) 100vw, 80vw"
+                  className="max-w-full max-h-[90vh] w-auto h-auto rounded-lg object-contain"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 1024px"
                   priority
-                  unoptimized={selectedPhoto.src.endsWith('.png')}
                 />
               </div>
             </motion.div>
