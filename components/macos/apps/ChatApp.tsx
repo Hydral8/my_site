@@ -205,37 +205,47 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
       const previousMessages = previousData?.messages || []
       const currentCursor = userChatCursor || previousData?.cursor || null
       
-      let response: Response
-      if (currentCursor) {
-        // Use sync endpoint for incremental updates
-        response = await fetch(`/api/chat/sync?sessionId=${sessionId}&conversationId=1&isAI=false&cursor=${currentCursor}`, { signal })
-      } else {
-        // First load - use load endpoint
-        response = await fetch(`/api/chat/load?sessionId=${sessionId}&conversationId=1&isAI=false`, { signal })
-      }
-      
-      if (!response.ok) return { messages: previousMessages, cursor: currentCursor }
-      
-      const data = await response.json()
-      if (data.success) {
-        const newMessages = data.messages ? convertToWebFormat(data.messages) : []
-        
-        // Merge with previous messages (deduplicate by id)
-        const existingIds = new Set(previousMessages.map((m: Message) => m.id))
-        const uniqueNewMessages = newMessages.filter((m: Message) => !existingIds.has(m.id))
-        const allMessages = deduplicateMessages([...previousMessages, ...uniqueNewMessages])
-        
-        // Get cursor from response or from last message
-        const cursor = data.cursor || (newMessages.length > 0 && data.messages?.[data.messages.length - 1]?.streamId) || currentCursor
-        
-        // Update cursor state
-        if (cursor && cursor !== userChatCursor) {
-          setUserChatCursor(cursor)
+      try {
+        let response: Response
+        if (currentCursor) {
+          // Use sync endpoint for incremental updates
+          response = await fetch(`/api/chat/sync?sessionId=${sessionId}&conversationId=1&isAI=false&cursor=${currentCursor}`, { signal })
+        } else {
+          // First load - use load endpoint
+          response = await fetch(`/api/chat/load?sessionId=${sessionId}&conversationId=1&isAI=false`, { signal })
         }
         
-        return { messages: allMessages, cursor }
+        if (!response.ok) {
+          console.warn(`Failed to load messages: ${response.status} ${response.statusText}`)
+          return { messages: previousMessages, cursor: currentCursor }
+        }
+        
+        const data = await response.json()
+        if (data.success) {
+          const newMessages = data.messages ? convertToWebFormat(data.messages) : []
+          
+          // Merge with previous messages (deduplicate by id)
+          const existingIds = new Set(previousMessages.map((m: Message) => m.id))
+          const uniqueNewMessages = newMessages.filter((m: Message) => !existingIds.has(m.id))
+          const allMessages = deduplicateMessages([...previousMessages, ...uniqueNewMessages])
+          
+          // Get cursor from response or from last message
+          const cursor = data.cursor || (newMessages.length > 0 && data.messages?.[data.messages.length - 1]?.streamId) || currentCursor
+          
+          // Update cursor state
+          if (cursor && cursor !== userChatCursor) {
+            setUserChatCursor(cursor)
+          }
+          
+          return { messages: allMessages, cursor }
+        }
+        return { messages: previousMessages, cursor: currentCursor }
+      } catch (error) {
+        // Handle network errors, JSON parse errors, etc.
+        console.error('Error loading messages:', error)
+        // Return previous data on error to prevent UI breaking
+        return { messages: previousMessages, cursor: currentCursor }
       }
-      return { messages: previousMessages, cursor: currentCursor }
     },
     enabled: !!sessionId && isActive,
     // No refetchInterval - SSE handles real-time updates
@@ -460,7 +470,7 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
         status: message.status || 'sent',
       }
 
-      const response = await fetch('/api/chat/save', {
+        const response = await fetch('/api/chat/save', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -474,7 +484,8 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
       })
 
       if (!response.ok) {
-        throw new Error('Failed to save messages')
+        const errorText = await response.text().catch(() => 'Unknown error')
+        throw new Error(`Failed to save messages: ${response.status} ${errorText}`)
       }
 
       return response.json()
@@ -583,6 +594,10 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
             timestamp: new Date().toISOString()
           })
         })
+        
+        if (!response.ok) {
+          throw new Error(`Push notification failed: ${response.status}`)
+        }
         
         const result = await response.json()
         
