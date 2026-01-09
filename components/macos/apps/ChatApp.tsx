@@ -281,31 +281,17 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
   // Merge initial messages with Redis data so welcome messages show even when Redis is empty
   const currentMessages = useMemo(() => {
     if (selectedConversation.id === 1) {
-      // Merge initial messages with Redis messages
-      const initialMessages = selectedConversation.messages || []
+      // Get the welcome message (id: 1) - the only non-Redis message
+      const welcomeMessage = selectedConversation.messages?.find(m => m.id === 1)
       const redisMessages = userChatMessages || []
       
-      // Find the welcome message (id: 1) - always put it first
-      const welcomeMessage = initialMessages.find(m => m.id === 1)
-      
-      // If Redis is empty, use initial messages (welcome message already at top)
-      if (redisMessages.length === 0) {
-        return deduplicateMessages(initialMessages)
-      }
-      
-      // Merge and deduplicate (Redis messages take precedence, but welcome message always first)
-      const existingIds = new Set(redisMessages.map(m => m.id))
-      const uniqueInitialMessages = initialMessages.filter(m => !existingIds.has(m.id) && m.id !== 1)
-      
-      // Combine: welcome message first, then all other messages (Redis + unique initial)
-      const allOtherMessages = deduplicateMessages([...redisMessages, ...uniqueInitialMessages])
-      
-      // Always put welcome message at the very top
+      // Always put welcome message first, then all Redis messages
       if (welcomeMessage) {
-        return deduplicateMessages([welcomeMessage, ...allOtherMessages])
+        return deduplicateMessages([welcomeMessage, ...redisMessages])
       }
       
-      return allOtherMessages
+      // Fallback: if no welcome message, just return Redis messages
+      return deduplicateMessages(redisMessages)
     } else if (selectedConversation.id === 2 && selectedConversation.isAI) {
       // AI chat is transient - only use client-side cache (no Redis)
       const initialMessages = selectedConversation.messages || []
