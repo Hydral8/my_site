@@ -285,15 +285,27 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
       const initialMessages = selectedConversation.messages || []
       const redisMessages = userChatMessages || []
       
-      // If Redis is empty, use initial messages
+      // Find the welcome message (id: 1) - always put it first
+      const welcomeMessage = initialMessages.find(m => m.id === 1)
+      
+      // If Redis is empty, use initial messages (welcome message already at top)
       if (redisMessages.length === 0) {
         return deduplicateMessages(initialMessages)
       }
       
-      // Merge and deduplicate (Redis messages take precedence)
+      // Merge and deduplicate (Redis messages take precedence, but welcome message always first)
       const existingIds = new Set(redisMessages.map(m => m.id))
-      const uniqueInitialMessages = initialMessages.filter(m => !existingIds.has(m.id))
-      return deduplicateMessages([...redisMessages, ...uniqueInitialMessages])
+      const uniqueInitialMessages = initialMessages.filter(m => !existingIds.has(m.id) && m.id !== 1)
+      
+      // Combine: welcome message first, then all other messages (Redis + unique initial)
+      const allOtherMessages = deduplicateMessages([...redisMessages, ...uniqueInitialMessages])
+      
+      // Always put welcome message at the very top
+      if (welcomeMessage) {
+        return deduplicateMessages([welcomeMessage, ...allOtherMessages])
+      }
+      
+      return allOtherMessages
     } else if (selectedConversation.id === 2 && selectedConversation.isAI) {
       // AI chat is transient - only use client-side cache (no Redis)
       const initialMessages = selectedConversation.messages || []
