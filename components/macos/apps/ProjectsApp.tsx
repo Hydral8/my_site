@@ -407,6 +407,15 @@ export default function ProjectsApp({ windowId, isActive, windowControls }: AppC
             background: "rgba(30, 30, 32, 0.7)",
             borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
           }}
+          onMouseDown={(e) => {
+            if (
+              e.target === e.currentTarget ||
+              (!(e.target as HTMLElement).closest('button') && 
+               !(e.target as HTMLElement).closest('input'))
+            ) {
+              dragHandler?.(e)
+            }
+          }}
         >
           <div className="flex items-center gap-3">
             <h2 className="text-white font-medium text-sm">{albumTitle}</h2>

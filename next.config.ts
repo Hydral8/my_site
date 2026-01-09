@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import path from 'path'
 
 const nextConfig: NextConfig = {
   // Vercel serverless function configuration
@@ -7,6 +8,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+  outputFileTracingRoot: path.join(__dirname),
 }
 
 export default nextConfig

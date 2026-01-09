@@ -374,77 +374,152 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
   useEffect(() => {
     if (!isActive || !sessionId) return // Don't connect when window is not active
 
-    const eventSources: EventSource[] = []
+    let currentStream: EventSource | null = null
+    let reconnectTimeout: NodeJS.Timeout | null = null
+    let syncInterval: NodeJS.Timeout | null = null
+    let isReconnecting = false
 
-    // Connect to real user chat stream
-    const userChatStream = new EventSource(
-      `/api/chat/stream?sessionId=${sessionId}&conversationId=1&isAI=false`
-    )
-
-    userChatStream.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        
-        if (data.type === 'reconnect') {
-          // Server is asking us to reconnect (serverless timeout)
-          // Close current connection and let EventSource auto-reconnect
-          console.log('SSE reconnect requested by server:', data.message)
-          userChatStream.close()
-          // EventSource will automatically reconnect after a short delay
-          return
-        }
-        
-        if (data.type === 'message' && data.message) {
-          // Update cache directly instead of invalidating (more efficient)
-          const queryKey = ['messages', sessionId, '1', false]
-          const currentData = queryClient.getQueryData<MessagesData>(queryKey)
-          
-          if (currentData) {
-            const msg = data.message
-            const webMessage: Message = {
-              id: parseInt(msg.id, 10),
-              text: msg.text,
-              sender: msg.sender === 'contact' ? 'visitor' : 'me',
-              timestamp: new Date(msg.timestamp),
-              status: msg.status || 'sent',
-            }
-            
-            // Check if message already exists (deduplicate)
-            const existingIds = new Set(currentData.messages.map(m => m.id))
-            if (!existingIds.has(webMessage.id)) {
-              const updatedMessages = deduplicateMessages([...currentData.messages, webMessage])
-              const cursor = msg.streamId || currentData.cursor
-              
-              queryClient.setQueryData<MessagesData>(queryKey, {
-                messages: updatedMessages,
-                cursor: cursor,
-              })
-            }
-          } else {
-            // If no cache, invalidate to trigger initial load
-            queryClient.invalidateQueries({ queryKey })
-          }
-        }
-      } catch (error) {
-        console.error('Error parsing SSE message:', error)
+    // Function to create SSE connection with current cursor
+    const createSSEConnection = () => {
+      // Close existing stream if any
+      if (currentStream) {
+        currentStream.close()
+        currentStream = null
       }
+
+      // Get current cursor from query cache
+      const queryKey = ['messages', sessionId, '1', false]
+      const currentData = queryClient.getQueryData<MessagesData>(queryKey)
+      const cursor = currentData?.cursor || '$'
+      
+      const url = `/api/chat/stream?sessionId=${sessionId}&conversationId=1&isAI=false&cursor=${encodeURIComponent(cursor)}`
+      const userChatStream = new EventSource(url)
+      currentStream = userChatStream
+
+      userChatStream.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          
+          if (data.type === 'reconnect') {
+            // Server is asking us to reconnect (serverless timeout)
+            // Close current connection and reconnect with updated cursor
+            console.log('SSE reconnect requested by server:', data.message)
+            isReconnecting = true
+            
+            // Reconnect after a short delay with updated cursor
+            reconnectTimeout = setTimeout(() => {
+              if (isReconnecting) {
+                createSSEConnection()
+              }
+            }, 1000)
+            return
+          }
+          
+          if (data.type === 'message' && data.message) {
+            // Update cache directly instead of invalidating (more efficient)
+            const queryKey = ['messages', sessionId, '1', false]
+            const currentData = queryClient.getQueryData<MessagesData>(queryKey)
+            
+            if (currentData) {
+              const msg = data.message
+              const webMessage: Message = {
+                id: parseInt(msg.id, 10),
+                text: msg.text,
+                sender: msg.sender === 'contact' ? 'visitor' : 'me',
+                timestamp: new Date(msg.timestamp),
+                status: msg.status || 'sent',
+              }
+              
+              // Check if message already exists (deduplicate)
+              const existingIds = new Set(currentData.messages.map(m => m.id))
+              if (!existingIds.has(webMessage.id)) {
+                const updatedMessages = deduplicateMessages([...currentData.messages, webMessage])
+                const cursor = msg.streamId || currentData.cursor
+                
+                queryClient.setQueryData<MessagesData>(queryKey, {
+                  messages: updatedMessages,
+                  cursor: cursor,
+                })
+              }
+            } else {
+              // If no cache, invalidate to trigger initial load
+              queryClient.invalidateQueries({ queryKey })
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing SSE message:', error)
+        }
+      }
+
+      userChatStream.onerror = (error) => {
+        console.error('SSE connection error (user chat):', error)
+        // Close and reconnect with updated cursor
+        isReconnecting = true
+        
+        reconnectTimeout = setTimeout(() => {
+          if (isReconnecting) {
+            createSSEConnection()
+          }
+        }, 2000)
+      }
+
+      return userChatStream
     }
 
-    userChatStream.onerror = (error) => {
-      console.error('SSE connection error (user chat):', error)
-      // EventSource will automatically reconnect
-    }
+    // Initial connection
+    createSSEConnection()
 
-    eventSources.push(userChatStream)
+    // Periodic sync check as fallback (every 10 seconds)
+    syncInterval = setInterval(() => {
+      const queryKey = ['messages', sessionId, '1', false]
+      const currentData = queryClient.getQueryData<MessagesData>(queryKey)
+      const cursor = currentData?.cursor || null
+      
+      if (cursor && cursor !== '$') {
+        // Use sync endpoint to catch up on any missed messages
+        fetch(`/api/chat/sync?sessionId=${sessionId}&conversationId=1&isAI=false&cursor=${encodeURIComponent(cursor)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.messages && data.messages.length > 0) {
+              const newMessages = convertToWebFormat(data.messages)
+              const existingData = queryClient.getQueryData<MessagesData>(queryKey)
+              
+              if (existingData) {
+                const existingIds = new Set(existingData.messages.map(m => m.id))
+                const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id))
+                
+                if (uniqueNewMessages.length > 0) {
+                  queryClient.setQueryData<MessagesData>(queryKey, {
+                    messages: deduplicateMessages([...existingData.messages, ...uniqueNewMessages]),
+                    cursor: data.cursor || existingData.cursor,
+                  })
+                }
+              }
+            }
+          })
+          .catch(err => {
+            // Silently fail - SSE is primary mechanism
+            if (!err.message?.includes('aborted')) {
+              console.warn('Periodic sync check failed:', err)
+            }
+          })
+      }
+    }, 10000) // Every 10 seconds
 
     // AI chat is transient - no SSE connection needed since messages are only in client-side state
     // AI responses come directly from /api/chat endpoint when user sends a message
 
     // Cleanup: close connections on unmount or when inactive
     return () => {
-      eventSources.forEach(es => es.close())
+      isReconnecting = false
+      if (reconnectTimeout) clearTimeout(reconnectTimeout)
+      if (syncInterval) clearInterval(syncInterval)
+      if (currentStream) {
+        currentStream.close()
+        currentStream = null
+      }
     }
-  }, [isActive, sessionId, queryClient, deduplicateMessages])
+  }, [isActive, sessionId, queryClient, deduplicateMessages, convertToWebFormat])
 
   // Mutation to save messages (using TanStack Query with optimistic updates)
   const saveMessagesMutation = useMutation({
