@@ -202,7 +202,7 @@ export default function MobileAboutApp() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
                   onClick={() => setExpandedItem(expandedItem === i ? null : i)}
-                  className="bg-white/5 rounded-xl p-4 active:bg-white/10 transition-colors cursor-pointer"
+                  className="bg-white/5 rounded-xl p-4 active:bg-white/10 transition-colors cursor-default"
                 >
                   <div className="flex items-start justify-between mb-1">
                     <div>

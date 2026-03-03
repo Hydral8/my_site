@@ -76,7 +76,7 @@ export default function MobileProjectsApp() {
               transition={{ delay: i * 0.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setSelectedProject(project)}
-              className="aspect-square rounded-2xl overflow-hidden cursor-pointer relative"
+              className="aspect-square rounded-2xl overflow-hidden cursor-default relative"
               style={{
                 background: project.background || project.gradient,
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',

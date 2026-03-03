@@ -128,7 +128,7 @@ function MinimizedWindowIcon({ windowId, title, previewHtml, previewSize, onClic
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={onClick}
-      className="relative cursor-pointer"
+      className="relative cursor-default"
       style={{ width: actualWidth, height: actualHeight }}
     >
       <AnimatePresence>

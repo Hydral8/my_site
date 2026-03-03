@@ -247,6 +247,30 @@ function AboutSection() {
         </div>
       </div>
 
+      {/* Publications */}
+      <div className="pt-6">
+        <p className="mb-3">Publications:</p>
+        <ul className="space-y-2 ml-6">
+          <li className="flex items-start gap-2">
+            <span className="text-[#999] mt-0.5 shrink-0">•</span>
+            <span>
+              <a
+                href="https://doi.org/10.1101/2024.10.10.617645"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#c45a2d] hover:underline font-medium"
+              >
+                cGAS deficient mice display premature aging associated with de-repression of LINE1 elements and inflammation
+              </a>
+              {" — "}
+              <span className="text-[#666] text-[13px]">
+                Martinez JC, Morandini F, ..., <em>Bae SJ</em>, ..., Seluanov A, Gorbunova V. bioRxiv, 2024.
+              </span>
+            </span>
+          </li>
+        </ul>
+      </div>
+
       {/* Contact */}
       <div className="mt-10 pt-6 border-t border-[#e5e5e5]">
         <p className="text-[#999] text-sm" style={{ fontFamily: "'Inter', 'Helvetica Neue', sans-serif" }}>

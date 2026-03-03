@@ -400,7 +400,7 @@ export default function ProjectsApp({ windowId, windowControls }: AppComponentPr
                   transition={{ delay: index * 0.05 }}
                   whileHover={{ scale: 1.02 }}
                   onClick={() => setSelectedPhoto(photo)}
-                  className="aspect-square rounded-lg overflow-hidden cursor-pointer relative group"
+                  className="aspect-square rounded-lg overflow-hidden cursor-default relative group"
                   style={{
                     boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
                   }}
@@ -425,7 +425,7 @@ export default function ProjectsApp({ windowId, windowControls }: AppComponentPr
                 transition={{ delay: index * 0.05 }}
                 whileHover={{ scale: 1.02 }}
                 onClick={() => setSelectedProject(project)}
-                className="aspect-square rounded-lg overflow-hidden cursor-pointer relative group"
+                className="aspect-square rounded-lg overflow-hidden cursor-default relative group"
                 style={{
                   background: project.background || project.gradient,
                   boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",

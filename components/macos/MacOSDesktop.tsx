@@ -15,6 +15,7 @@ import ChatApp from './apps/ChatApp'
 import ProfileApp from './apps/ProfileApp'
 import Image from 'next/image'
 import { useSession } from '@/lib/useSession'
+import StickyNote from './StickyNote'
 // import icons for the apps
 // import AboutIcon from '../../public/icons/about.png'
 // import ProjectsIcon from '../../public/icons/projects.png'
@@ -120,7 +121,7 @@ function DesktopProfileIcon() {
     >
       <motion.div
         onClick={() => openWindow('profile')}
-        className="flex flex-col items-center gap-3 cursor-pointer pointer-events-auto group"
+        className="flex flex-col items-center gap-3 cursor-default pointer-events-auto group"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
       >
@@ -167,6 +168,9 @@ function DesktopContent() {
 
       {/* Menu Bar */}
       <MenuBar />
+
+      {/* Sticky Note */}
+      <StickyNote />
 
       {/* Windows */}
       {windows.map((window) => {
