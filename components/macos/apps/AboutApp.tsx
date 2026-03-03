@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useId } from "react";
 import { AppComponentProps } from "@/types/macos";
 import { motion, AnimatePresence } from "framer-motion";
-import { useDragHandler } from "../Window";
+import { useDraggableHeader } from "../Window";
+import TrafficLights from "../TrafficLights";
 
 const timeline = [
   {
@@ -72,8 +73,7 @@ const timeline = [
     company: "Meural",
     role: "Founder",
     type: "Company",
-    description:
-      "Making general robotics a modern reality.",
+    description: "Making general robotics a modern reality.",
     link: "https://meural.com",
   },
 ];
@@ -106,8 +106,7 @@ const projects = [
   {
     title: "Meural",
     tagline: "General Robotics Platform",
-    description:
-      "Making general robotics a modern reality.",
+    description: "Making general robotics a modern reality.",
     tech: ["Robotics", "AI/ML", "Python", "Computer Vision"],
     link: "https://meural.com",
   },
@@ -392,187 +391,177 @@ const SidebarIcon = ({ type }: { type: string }) => {
   }
 };
 
+const convertBytesToKB = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} bytes`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+};
+
+// Helper function to calculate file sizes
+const calculateSize = (
+  content: {
+    company?: string;
+    title?: string;
+    tagline?: string;
+    description?: string;
+    tech?: string[];
+    items?: string[];
+  },
+  contentType: "about" | "contact" | "timeline" | "project" | "skill",
+): string => {
+  // string check
+  switch (contentType) {
+    // Simple text files
+    case "about":
+      return "1.3 KB";
+    case "contact":
+      return "924 bytes";
+    case "timeline":
+      const baseSize = 800 + (content.description?.length || 0) * 5;
+      return convertBytesToKB(baseSize);
+    case "project":
+      const techCount = content.tech?.length || 0;
+      const techbaseSize = 1200 + techCount * 150;
+      return convertBytesToKB(techbaseSize);
+    case "skill":
+      const itemCount = content.items?.length || 0;
+      const skillbaseSize = 600 + itemCount * 80;
+      return convertBytesToKB(skillbaseSize);
+    default:
+      return "1.0 KB";
+  }
+};
+
+// Helper to calculate folder size
+const calculateFolderSize = (items: any[], contentType: "about" | "contact" | "timeline" | "project" | "skill"): string => {
+  let totalBytes = 0;
+  items.forEach((item) => {
+    const size = calculateSize(item, contentType);
+    const match = size.match(/^([\d.]+)\s*(bytes|KB)$/);
+    if (match) {
+      const value = parseFloat(match[1]);
+      const unit = match[2];
+      totalBytes += unit === "KB" ? value * 1024 : value;
+    }
+  });
+
+  return convertBytesToKB(totalBytes);
+};
+
+const getCurrentItems = (currentPath: PathSegment[]): FileItem[] => {
+  const path = currentPath.join("/");
+
+  if (path === "About Me") {
+    return [
+      {
+        name: "About.txt",
+        type: "document",
+        dateModified: "Today",
+        size: "1.3 KB",
+        kind: "Plain Text",
+        content: "about",
+      },
+      {
+        name: "Timeline",
+        type: "folder",
+        dateModified: "Today",
+        size: calculateFolderSize(timeline, "timeline"),
+        kind: "Folder",
+        content: timeline,
+      },
+      {
+        name: "Projects",
+        type: "folder",
+        dateModified: "Today",
+        size: calculateFolderSize(projects, "project"),
+        kind: "Folder",
+        content: projects,
+      },
+      {
+        name: "Skills",
+        type: "folder",
+        dateModified: "Today",
+        size: calculateFolderSize(skills, "skill"),
+        kind: "Folder",
+        content: skills,
+      },
+      {
+        name: "Contact.txt",
+        type: "document",
+        dateModified: "Today",
+        size: "924 bytes",
+        kind: "Plain Text",
+        content: "contact",
+      },
+    ];
+  } else if (path === "About Me/Timeline") {
+    return timeline.map((item) => ({
+      name: `${item.company}.txt`,
+      type: "document" as FileType,
+      dateModified: item.endDate === "Present" ? "Today" : item.endDate,
+      size: calculateSize(item, "timeline"),
+      kind: item.type || "Plain Text",
+      content: item,
+      link: item.link || undefined,
+    }));
+  } else if (path === "About Me/Projects") {
+    return projects.map((project) => ({
+      name: `${project.title}.txt`,
+      type: "link" as FileType,
+      dateModified: "Today",
+      size: calculateSize(project, "project"),
+      kind: "Project",
+      content: project,
+      link: project.link,
+    }));
+  } else if (path === "About Me/Skills") {
+    return skills.map((skill) => ({
+      name: `${skill.category}.txt`,
+      type: "document" as FileType,
+      dateModified: "Today",
+      size: calculateSize(skill, "skill"),
+      kind: "Skill",
+      content: skill,
+    }));
+  }
+
+  return [];
+};
+
 export default function AboutApp({
   windowId,
-  isActive,
   windowControls,
 }: AppComponentProps) {
   const [currentPath, setCurrentPath] = useState<PathSegment[]>(["About Me"]);
-  const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const items = getCurrentItems(currentPath);
+  const [selectedItem, setSelectedItem] = useState<string | null>(
+    items[selectedIndex].name ?? null,
+  );
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const listRef = useRef<HTMLDivElement>(null);
-  const dragHandler = useDragHandler();
-
-  // Helper function to calculate file sizes
-  const calculateSize = (content: any, type: string): string => {
-    if (typeof content === "string") {
-      // Simple text files
-      if (content === "about") return "1.3 KB";
-      if (content === "contact") return "924 bytes";
-    }
-    
-    if (content && typeof content === "object") {
-      // Timeline items - vary by description length
-      if ("company" in content) {
-        const baseSize = 800 + (content.description?.length || 0) * 5;
-        if (baseSize < 1024) return `${baseSize} bytes`;
-        return `${(baseSize / 1024).toFixed(1)} KB`;
-      }
-      
-      // Project items - vary by tech stack size
-      if ("title" in content && "tagline" in content) {
-        const techCount = content.tech?.length || 0;
-        const baseSize = 1200 + techCount * 150;
-        return `${(baseSize / 1024).toFixed(1)} KB`;
-      }
-      
-      // Skill items - vary by number of items
-      if ("category" in content && "items" in content) {
-        const itemCount = content.items?.length || 0;
-        const baseSize = 600 + itemCount * 80;
-        if (baseSize < 1024) return `${baseSize} bytes`;
-        return `${(baseSize / 1024).toFixed(1)} KB`;
-      }
-    }
-    
-    return "1.0 KB";
-  };
-
-  // Helper to calculate folder size
-  const calculateFolderSize = (items: any[]): string => {
-    let totalBytes = 0;
-    items.forEach((item) => {
-      const size = calculateSize(item, "document");
-      const match = size.match(/^([\d.]+)\s*(bytes|KB)$/);
-      if (match) {
-        const value = parseFloat(match[1]);
-        const unit = match[2];
-        totalBytes += unit === "KB" ? value * 1024 : value;
-      }
-    });
-    
-    if (totalBytes < 1024) return `${Math.round(totalBytes)} bytes`;
-    return `${(totalBytes / 1024).toFixed(1)} KB`;
-  };
-
-  const getCurrentItems = (): FileItem[] => {
-    const path = currentPath.join("/");
-
-    if (path === "About Me") {
-      return [
-        {
-          name: "About.txt",
-          type: "document",
-          dateModified: "Today",
-          size: "1.3 KB",
-          kind: "Plain Text",
-          content: "about",
-        },
-        {
-          name: "Timeline",
-          type: "folder",
-          dateModified: "Today",
-          size: calculateFolderSize(timeline),
-          kind: "Folder",
-          content: timeline,
-        },
-        {
-          name: "Projects",
-          type: "folder",
-          dateModified: "Today",
-          size: calculateFolderSize(projects),
-          kind: "Folder",
-          content: projects,
-        },
-        {
-          name: "Skills",
-          type: "folder",
-          dateModified: "Today",
-          size: calculateFolderSize(skills),
-          kind: "Folder",
-          content: skills,
-        },
-        {
-          name: "Contact.txt",
-          type: "document",
-          dateModified: "Today",
-          size: "924 bytes",
-          kind: "Plain Text",
-          content: "contact",
-        },
-      ];
-    } else if (path === "About Me/Timeline") {
-      return timeline.map((item) => ({
-        name: `${item.company}.txt`,
-        type: "document" as FileType,
-        dateModified: item.endDate === "Present" ? "Today" : item.endDate,
-        size: calculateSize(item, "document"),
-        kind: item.type || "Plain Text",
-        content: item,
-        link: item.link || undefined,
-      }));
-    } else if (path === "About Me/Projects") {
-      return projects.map((project) => ({
-        name: `${project.title}.txt`,
-        type: "link" as FileType,
-        dateModified: "Today",
-        size: calculateSize(project, "link"),
-        kind: "Project",
-        content: project,
-        link: project.link,
-      }));
-    } else if (path === "About Me/Skills") {
-      return skills.map((skill) => ({
-        name: `${skill.category}.txt`,
-        type: "document" as FileType,
-        dateModified: "Today",
-        size: calculateSize(skill, "document"),
-        kind: "Skill",
-        content: skill,
-      }));
-    }
-
-    return [];
-  };
-
-  const items = getCurrentItems();
+  const headerDrag = useDraggableHeader();
 
   // Keyboard navigation
-  useEffect(() => {
-    if (!isActive) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedIndex((prev) => Math.max(0, prev - 1));
-      } else if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
-      } else if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        const item = items[selectedIndex];
-        if (item) {
-          handleItemClick(item);
-        }
-      } else if (e.key === "ArrowLeft" && currentPath.length > 1) {
-        e.preventDefault();
-        goBack();
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedIndex((prev) => Math.max(0, prev - 1));
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const item = items[selectedIndex];
+      if (item) {
+        handleItemClick(item);
       }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isActive, selectedIndex, items, currentPath]);
-
-  // Update selected item when index changes
-  useEffect(() => {
-    if (items[selectedIndex]) {
-      setSelectedItem(items[selectedIndex].name);
+    } else if (e.key === "ArrowLeft" && currentPath.length > 1) {
+      e.preventDefault();
+      goBack();
     }
-  }, [selectedIndex, items]);
+  };
 
   const handleItemClick = (item: FileItem) => {
     setSelectedItem(item.name);
@@ -604,10 +593,13 @@ export default function AboutApp({
         <div className="p-4 space-y-3 text-white/80 text-sm">
           <h3 className="font-semibold text-white">About Me</h3>
           <p className="leading-relaxed text-xs">
-            My goal is to build world changing products that meaningfully change how people live, work, and is also incredibly interesting to me. 
+            My goal is to build world changing products that meaningfully change
+            how people live, work, and is also incredibly interesting to me.
           </p>
           <div className="text-xs">
-            <p className="text-white/70 mb-1.5">Have a couple long term goals atm:</p>
+            <p className="text-white/70 mb-1.5">
+              Have a couple long term goals atm:
+            </p>
             <ul className="space-y-1 ml-4">
               <li className="flex items-start gap-2">
                 <span className="text-white/40 mt-0.5">•</span>
@@ -637,22 +629,60 @@ export default function AboutApp({
 
     if (selectedItemData.name === "Contact.txt") {
       // Obfuscated contact info
-      const emailParts = ['sbae', '703', '@', 'gmail', '.', 'com'];
-      const linkedinParts = ['https://', 'www.', 'linkedin', '.com/', 'in/', 'sungjae', 'bae'];
-      const githubParts = ['https://', 'github', '.com/', 'hydral', '8'];
-      
-      const email = emailParts.join('');
-      const linkedin = linkedinParts.join('');
-      const github = githubParts.join('');
-      
+      const emailParts = ["sbae", "703", "@", "gmail", ".", "com"];
+      const linkedinParts = [
+        "https://",
+        "www.",
+        "linkedin",
+        ".com/",
+        "in/",
+        "sungjae",
+        "bae",
+      ];
+      const githubParts = ["https://", "github", ".com/", "hydral", "8"];
+
+      const email = emailParts.join("");
+      const linkedin = linkedinParts.join("");
+      const github = githubParts.join("");
+
       return (
         <div className="p-4 space-y-3 text-white/80 text-sm">
           <h3 className="font-semibold text-white">Contact</h3>
           <div className="space-y-1 text-xs">
-            <div>Email: <a href={`mailto:${email}`} target="_blank" rel="noopener noreferrer" className="text-accent-cyan hover:underline">{email}</a></div>
+            <div>
+              Email:{" "}
+              <a
+                href={`mailto:${email}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent-cyan hover:underline"
+              >
+                {email}
+              </a>
+            </div>
             {/* all links should be clickable */}
-            <div>LinkedIn: <a href={linkedin} target="_blank" rel="noopener noreferrer" className="text-accent-cyan hover:underline">{linkedin}</a></div>
-            <div>GitHub: <a href={github} target="_blank" rel="noopener noreferrer" className="text-accent-cyan hover:underline">{github}</a></div>
+            <div>
+              LinkedIn:{" "}
+              <a
+                href={linkedin}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent-cyan hover:underline"
+              >
+                {linkedin}
+              </a>
+            </div>
+            <div>
+              GitHub:{" "}
+              <a
+                href={github}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent-cyan hover:underline"
+              >
+                {github}
+              </a>
+            </div>
           </div>
         </div>
       );
@@ -674,22 +704,22 @@ export default function AboutApp({
                       content.type === "Education"
                         ? "rgba(59, 130, 246, 0.2)"
                         : content.type === "Work"
-                        ? "rgba(34, 197, 94, 0.2)"
-                        : content.type === "Company"
-                        ? "rgba(168, 85, 247, 0.2)"
-                        : content.type === "Club"
-                        ? "rgba(236, 72, 153, 0.2)"
-                        : "rgba(148, 163, 184, 0.2)",
+                          ? "rgba(34, 197, 94, 0.2)"
+                          : content.type === "Company"
+                            ? "rgba(168, 85, 247, 0.2)"
+                            : content.type === "Club"
+                              ? "rgba(236, 72, 153, 0.2)"
+                              : "rgba(148, 163, 184, 0.2)",
                     color:
                       content.type === "Education"
                         ? "#93C5FD"
                         : content.type === "Work"
-                        ? "#86EFAC"
-                        : content.type === "Company"
-                        ? "#C4B5FD"
-                        : content.type === "Club"
-                        ? "#F472B6"
-                        : "#CBD5E1",
+                          ? "#86EFAC"
+                          : content.type === "Company"
+                            ? "#C4B5FD"
+                            : content.type === "Club"
+                              ? "#F472B6"
+                              : "#CBD5E1",
                   }}
                 >
                   {content.type}
@@ -770,7 +800,9 @@ export default function AboutApp({
       if (content.length > 0 && "company" in content[0]) {
         return (
           <div className="p-4 space-y-1.5 text-white/80 text-sm">
-            <h3 className="font-semibold text-white mb-2">{selectedItemData.name}</h3>
+            <h3 className="font-semibold text-white mb-2">
+              {selectedItemData.name}
+            </h3>
             <div className="space-y-1">
               {content.map((item: any, index: number) => (
                 <div key={index} className="flex items-center gap-2 py-1">
@@ -778,7 +810,9 @@ export default function AboutApp({
                   <div className="flex-1 text-xs">
                     <span className="text-white/90">{item.company}</span>
                     {item.type && (
-                      <span className="ml-2 text-[10px] text-white/50">({item.type})</span>
+                      <span className="ml-2 text-[10px] text-white/50">
+                        ({item.type})
+                      </span>
                     )}
                   </div>
                   <span className="text-[10px] text-white/40">
@@ -794,14 +828,18 @@ export default function AboutApp({
       else if (content.length > 0 && "title" in content[0]) {
         return (
           <div className="p-4 space-y-1.5 text-white/80 text-sm">
-            <h3 className="font-semibold text-white mb-2">{selectedItemData.name}</h3>
+            <h3 className="font-semibold text-white mb-2">
+              {selectedItemData.name}
+            </h3>
             <div className="space-y-1">
               {content.map((project: any, index: number) => (
                 <div key={index} className="flex items-center gap-2 py-1">
                   <div className="w-1 h-1 rounded-full bg-white/40 flex-shrink-0" />
                   <div className="flex-1 text-xs">
                     <span className="text-white/90">{project.title}</span>
-                    <span className="ml-2 text-[10px] text-white/50">— {project.tagline}</span>
+                    <span className="ml-2 text-[10px] text-white/50">
+                      — {project.tagline}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -813,7 +851,9 @@ export default function AboutApp({
       else if (content.length > 0 && "category" in content[0]) {
         return (
           <div className="p-4 space-y-1.5 text-white/80 text-sm">
-            <h3 className="font-semibold text-white mb-2">{selectedItemData.name}</h3>
+            <h3 className="font-semibold text-white mb-2">
+              {selectedItemData.name}
+            </h3>
             <div className="space-y-1">
               {content.map((skill: any, index: number) => (
                 <div key={index} className="flex items-center gap-2 py-1">
@@ -821,7 +861,8 @@ export default function AboutApp({
                   <div className="flex-1 text-xs">
                     <span className="text-white/90">{skill.category}</span>
                     <span className="ml-2 text-[10px] text-white/50">
-                      ({skill.items?.length || 0} {skill.items?.length === 1 ? 'skill' : 'skills'})
+                      ({skill.items?.length || 0}{" "}
+                      {skill.items?.length === 1 ? "skill" : "skills"})
                     </span>
                   </div>
                 </div>
@@ -843,12 +884,12 @@ export default function AboutApp({
         backdropFilter: "blur(40px) saturate(180%)",
         WebkitBackdropFilter: "blur(40px) saturate(180%)",
       }}
+      onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => handleKeyDown(e)}
+      tabIndex={-1} // Make the div focusable
     >
       <div className="flex flex-1">
         {/* Sidebar */}
-        <div
-          className="w-56 flex-shrink-0 text-xs relative flex flex-col"
-        >
+        <div className="w-56 flex-shrink-0 text-xs relative flex flex-col">
           <div
             className="absolute inset-0 -z-10"
             style={{
@@ -915,91 +956,14 @@ export default function AboutApp({
                 height: "42px",
                 zIndex: 20,
               }}
-              onMouseDown={(e) => {
-                // Only drag if clicking on the empty area, not on buttons
-                if (
-                  e.target === e.currentTarget ||
-                  !(e.target as HTMLElement).closest("button")
-                ) {
-                  dragHandler?.(e);
-                }
-              }}
+              onMouseDown={headerDrag}
             >
-              {/* Frosted blue background effect for traffic lights */}
               {windowControls && (
-                <>
-                  <button
-                    onClick={(e) => {
-                      console.log("close");
-                      e.stopPropagation();
-                      windowControls.close();
-                    }}
-                    className="w-3 h-3 rounded-full bg-[#FF5F57] hover:bg-[#FF5F57]/80 transition-colors relative group"
-                    aria-label="Close"
-                    style={{
-                      boxShadow:
-                        "0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)",
-                    }}
-                  >
-                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <svg width="6" height="6" viewBox="0 0 6 6" fill="none">
-                        <path
-                          d="M1 1L5 5M5 1L1 5"
-                          stroke="#5A0000"
-                          strokeWidth="1.2"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    </span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      windowControls.minimize();
-                    }}
-                    className="w-3 h-3 rounded-full bg-[#FFBD2E] hover:bg-[#FFBD2E]/80 transition-colors relative group"
-                    aria-label="Minimize"
-                    style={{
-                      boxShadow:
-                        "0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)",
-                    }}
-                  >
-                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <svg width="6" height="2" viewBox="0 0 6 2" fill="none">
-                        <path
-                          d="M1 1H5"
-                          stroke="#5A4000"
-                          strokeWidth="1.2"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    </span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      windowControls.maximize();
-                    }}
-                    className="w-3 h-3 rounded-full bg-[#28C840] hover:bg-[#28C840]/80 transition-colors relative group"
-                    aria-label="Maximize"
-                    style={{
-                      boxShadow:
-                        "0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)",
-                    }}
-                  >
-                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <svg width="6" height="6" viewBox="0 0 6 6" fill="none">
-                        <path
-                          d="M1 1L2.5 1M1 1L1 2.5M5 5L3.5 5M5 5L5 3.5"
-                          stroke="#005A00"
-                          strokeWidth="1.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </span>
-                  </button>
-                </>
+                <TrafficLights
+                  onClose={windowControls.close}
+                  onMinimize={windowControls.minimize}
+                  onMaximize={windowControls.maximize}
+                />
               )}
             </div>
 
@@ -1081,23 +1045,11 @@ export default function AboutApp({
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col">
           {/* Combined Header - Toolbar + Column Headers */}
-          <div
-            className="flex flex-col relative"
-          >
-
+          <div className="flex flex-col relative">
             {/* Toolbar Row - Back/Forward + Breadcrumbs */}
             <div
               className="flex items-center gap-2 px-3 relative py-3.5"
-              onMouseDown={(e) => {
-                // Only trigger drag on empty areas, not on buttons
-                if (
-                  e.target === e.currentTarget ||
-                  (e.target as HTMLElement).tagName === "SPAN" ||
-                  (e.target as HTMLElement).classList.contains("draggable-area")
-                ) {
-                  dragHandler?.(e);
-                }
-              }}
+              onMouseDown={headerDrag}
             >
               {/* Unified Back/Forward Buttons Container */}
               <div
@@ -1156,7 +1108,13 @@ export default function AboutApp({
                       borderRadius: "18px",
                     }}
                   />
-                  <svg width="24" height="24" viewBox="0 0 16 16" fill="none" className="relative z-10">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="relative z-10"
+                  >
                     <path
                       d="M10 12L6 8L10 4"
                       stroke="currentColor"
@@ -1195,7 +1153,13 @@ export default function AboutApp({
                       borderRadius: "18px",
                     }}
                   />
-                  <svg width="24" height="24" viewBox="0 0 16 16" fill="none" className="relative z-10">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    className="relative z-10"
+                  >
                     <path
                       d="M6 12L10 8L6 4"
                       stroke="currentColor"
@@ -1211,9 +1175,7 @@ export default function AboutApp({
               {/* Breadcrumbs */}
               <div
                 className="flex-1 px-3 py-1 rounded text-xs font-medium relative overflow-hidden draggable-area"
-                onMouseDown={(e) => {
-                  dragHandler?.(e);
-                }}
+                onMouseDown={headerDrag}
               >
                 <div
                   className="absolute inset-0 -z-10"
@@ -1228,7 +1190,10 @@ export default function AboutApp({
             </div>
 
             {/* Column Headers Row */}
-            <table className="w-full" style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
+            <table
+              className="w-full"
+              style={{ borderCollapse: "collapse", tableLayout: "fixed" }}
+            >
               <colgroup>
                 <col style={{ width: "40%" }} />
                 <col style={{ width: "25%" }} />
@@ -1276,7 +1241,10 @@ export default function AboutApp({
 
           {/* List View */}
           <div ref={listRef} className="flex-1 overflow-y-auto">
-            <table className="w-full" style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
+            <table
+              className="w-full"
+              style={{ borderCollapse: "collapse", tableLayout: "fixed" }}
+            >
               <colgroup>
                 <col style={{ width: "40%" }} />
                 <col style={{ width: "25%" }} />

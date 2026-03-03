@@ -39,6 +39,7 @@ export interface AppDefinition {
   minimizable: boolean
   customTrafficLights?: boolean // If true, app handles its own traffic lights
   titleBarBackground?: string // Custom background for title bar (CSS color value)
+  showInDock?: boolean // If false, app won't appear in dock (default true)
 }
 
 export interface WindowControls {
@@ -49,7 +50,6 @@ export interface WindowControls {
 
 export interface AppComponentProps {
   windowId: string
-  isActive: boolean
   windowControls?: WindowControls // Only provided if customTrafficLights is true
 }
 

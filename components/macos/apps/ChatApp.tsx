@@ -2,7 +2,8 @@
 
 import { AppComponentProps } from '@/types/macos'
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { useDragHandler } from '../Window'
+import { useDraggableHeader } from '../Window'
+import TrafficLights from '../TrafficLights'
 import ReactMarkdown from 'react-markdown'
 import { getStoredSessionId } from '@/lib/useSession'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -113,7 +114,7 @@ function formatDateHeader(date: Date): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export default function ChatApp({ windowId, isActive, windowControls }: AppComponentProps) {
+export default function ChatApp({ windowId, windowControls }: AppComponentProps) {
   const [conversations, setConversations] = useState<Conversation[]>(initialConversations)
   const [selectedConversation, setSelectedConversation] = useState<Conversation>(conversations[0])
   const [inputValue, setInputValue] = useState('')
@@ -128,7 +129,7 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
   const emojiPickerRef = useRef<HTMLDivElement>(null)
   const emojiButtonRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const dragHandler = useDragHandler()
+  const headerDrag = useDraggableHeader()
 
   // Close emoji picker when clicking outside
   useEffect(() => {
@@ -247,7 +248,7 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
         return { messages: previousMessages, cursor: currentCursor }
       }
     },
-    enabled: !!sessionId && isActive,
+    enabled: !!sessionId,
     // No refetchInterval - SSE handles real-time updates
     staleTime: 1000 * 60, // 1 minute - data is fresh for longer since SSE updates in real-time
     refetchOnWindowFocus: false, // Don't refetch on window focus
@@ -268,7 +269,7 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
       const previousData = queryClient.getQueryData<MessagesData>(queryKey)
       return previousData || { messages: [], cursor: null }
     },
-    enabled: !!sessionId && isActive,
+    enabled: !!sessionId,
     // No refetchInterval - SSE handles real-time updates
     staleTime: 1000 * 60, // 1 minute - data is fresh for longer since SSE updates in real-time
     refetchOnWindowFocus: false, // Don't refetch on window focus
@@ -342,7 +343,7 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
   // Mark user messages (from Expo) as read when viewing conversation (real user chat only)
   // Visitor messages are never marked as read from the web side - only mobile app can mark those
   useEffect(() => {
-    if (!sessionId || !isActive) return
+    if (!sessionId) return
     if (selectedConversation.id !== 1 || selectedConversation.isAI) return
     
     // Mark all user messages (from Expo) as read - these are messages the visitor has read
@@ -366,11 +367,11 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
       
       return () => clearTimeout(timeoutId)
     }
-  }, [sessionId, isActive, selectedConversation.id, selectedConversation.isAI, currentMessages])
+  }, [sessionId, selectedConversation.id, selectedConversation.isAI, currentMessages])
 
   // Set up SSE connections for real-time updates (invalidate queries on new messages)
   useEffect(() => {
-    if (!isActive || !sessionId) return // Don't connect when window is not active
+    if (!sessionId) return // Don't connect when window is not active
 
     let currentStream: EventSource | null = null
     let reconnectTimeout: NodeJS.Timeout | null = null
@@ -517,7 +518,7 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
         currentStream = null
       }
     }
-  }, [isActive, sessionId, queryClient, deduplicateMessages, convertToWebFormat])
+  }, [sessionId, queryClient, deduplicateMessages, convertToWebFormat])
 
   // Mutation to save messages (using TanStack Query with optimistic updates)
   const saveMessagesMutation = useMutation({
@@ -930,54 +931,16 @@ export default function ChatApp({ windowId, isActive, windowControls }: AppCompo
       {/* Header Bar */}
       <div 
         className="h-12 bg-[#2d2d2d]/95 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-3"
-        onMouseDown={(e) => {
-          if (
-            e.target === e.currentTarget ||
-            (!(e.target as HTMLElement).closest('button') && 
-             !(e.target as HTMLElement).closest('input'))
-          ) {
-            dragHandler?.(e)
-          }
-        }}
+        onMouseDown={headerDrag}
       >
         {/* Left side - Traffic lights + sidebar toggle */}
         <div className="flex items-center gap-3">
           {windowControls && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={(e) => { e.stopPropagation(); windowControls.close() }}
-                className="w-3 h-3 rounded-full bg-[#FF5F57] hover:bg-[#FF5F57]/80 transition-colors relative group"
-                style={{ boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)' }}
-              >
-                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg width="6" height="6" viewBox="0 0 6 6" fill="none">
-                    <path d="M1 1L5 5M5 1L1 5" stroke="#5A0000" strokeWidth="1.2" strokeLinecap="round"/>
-                  </svg>
-                </span>
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); windowControls.minimize() }}
-                className="w-3 h-3 rounded-full bg-[#FFBD2E] hover:bg-[#FFBD2E]/80 transition-colors relative group"
-                style={{ boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)' }}
-              >
-                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg width="6" height="2" viewBox="0 0 6 2" fill="none">
-                    <path d="M1 1H5" stroke="#5A4000" strokeWidth="1.2" strokeLinecap="round"/>
-                  </svg>
-                </span>
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); windowControls.maximize() }}
-                className="w-3 h-3 rounded-full bg-[#28C840] hover:bg-[#28C840]/80 transition-colors relative group"
-                style={{ boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)' }}
-              >
-                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg width="6" height="6" viewBox="0 0 6 6" fill="none">
-                    <path d="M1 1L2.5 1M1 1L1 2.5M5 5L3.5 5M5 5L5 3.5" stroke="#005A00" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </span>
-              </button>
-            </div>
+            <TrafficLights
+              onClose={windowControls.close}
+              onMinimize={windowControls.minimize}
+              onMaximize={windowControls.maximize}
+            />
           )}
           
           <button 

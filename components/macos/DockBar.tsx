@@ -270,7 +270,7 @@ function DockIcon({ appId, name, icon, className, onClick, onPositionUpdate, isO
 }
 
 export default function DockBar() {
-  const { apps, openWindow, windows, registerDockIconPosition, registerMinimizedWindowPosition, restoreWindow } = useWindowManager();
+  const { apps, openWindow, windows, registerDockIconPosition, registerMinimizedWindowPosition, restoreWindow, minimizeWindow, focusWindow } = useWindowManager();
 
   // Get minimized windows
   const minimizedWindows = windows.filter((w) => w.isMinimized);
@@ -295,18 +295,31 @@ export default function DockBar() {
         <div className="liquid-glass-content px-3 py-3 flex gap-5 w-full justify-between items-center">
           {/* App Icons */}
           <div className="flex gap-8 items-center">
-            {apps.map((app) => (
-              <DockIcon
-                key={app.id}
-                appId={app.id}
-                name={app.name}
-                icon={app.icon}
-                isOpen={windows.some((w) => w.appId === app.id && !w.isMinimized)}
-                className={app.className}
-                onClick={() => openWindow(app.id)}
-                onPositionUpdate={registerDockIconPosition}
-              />
-            ))}
+            {apps.filter((app) => app.showInDock !== false).map((app) => {
+              const isOpen = windows.some((w) => w.appId === app.id && !w.isMinimized)
+              const allOpenWindows = windows.filter((w) => w.appId === app.id && !w.isMinimized)
+
+              const openAllWindowsAndFocus = () => {
+                if (allOpenWindows.length === 0) {
+                  openWindow(app.id)
+                  return
+                }
+                // focus on the highest zIndex window
+                const highestZIndexWindow = allOpenWindows.reduce((max, w) => w.zIndex > max.zIndex ? w : max, allOpenWindows[0])
+                focusWindow(highestZIndexWindow.id)
+              }
+              return (
+                <DockIcon
+                  key={app.id}
+                  appId={app.id}
+                  name={app.name}
+                  icon={app.icon}
+                  isOpen={isOpen}
+                  className={app.className}
+                  onClick={openAllWindowsAndFocus}
+                  onPositionUpdate={registerDockIconPosition}
+                />
+              )})}
           </div>
 
           {/* Separator and Minimized Windows */}

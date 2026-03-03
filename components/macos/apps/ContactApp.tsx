@@ -2,7 +2,8 @@
 
 import { AppComponentProps } from '@/types/macos'
 import { useState, useMemo } from 'react'
-import { useDragHandler } from '../Window'
+import { useDraggableHeader } from '../Window'
+import TrafficLights from '../TrafficLights'
 import Image from 'next/image'
 
 interface Contact {
@@ -82,14 +83,14 @@ function getInitials(name: string): string {
   return name.slice(0, 2).toUpperCase()
 }
 
-export default function ContactApp({ windowId, isActive, windowControls }: AppComponentProps) {
+export default function ContactApp({ windowId, windowControls }: AppComponentProps) {
   const [contacts, setContacts] = useState<Contact[]>(initialContacts)
   const [selectedContact, setSelectedContact] = useState<Contact>(contacts[0])
   const [searchQuery, setSearchQuery] = useState('')
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState<Contact | null>(null)
-  const dragHandler = useDragHandler()
+  const headerDrag = useDraggableHeader()
 
   const filteredContacts = contacts.filter(contact =>
     contact.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -159,74 +160,16 @@ export default function ContactApp({ windowId, isActive, windowControls }: AppCo
       {/* Unified Header Bar with Traffic Lights and Toolbar */}
       <div 
         className="h-12 bg-[#2a2a2a] border-b border-white/10 flex items-center justify-between px-3"
-        onMouseDown={(e) => {
-          // Only drag if clicking on empty area, not on buttons or inputs
-          if (
-            e.target === e.currentTarget ||
-            (!(e.target as HTMLElement).closest('button') && 
-             !(e.target as HTMLElement).closest('input'))
-          ) {
-            dragHandler?.(e)
-          }
-        }}
+        onMouseDown={headerDrag}
       >
         {/* Left side - Traffic lights + Layout toggle */}
         <div className="flex items-center gap-4">
-          {/* Traffic Lights */}
           {windowControls && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  windowControls.close()
-                }}
-                className="w-3 h-3 rounded-full bg-[#FF5F57] hover:bg-[#FF5F57]/80 transition-colors relative group"
-                aria-label="Close"
-                style={{
-                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)',
-                }}
-              >
-                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg width="6" height="6" viewBox="0 0 6 6" fill="none">
-                    <path d="M1 1L5 5M5 1L1 5" stroke="#5A0000" strokeWidth="1.2" strokeLinecap="round"/>
-                  </svg>
-                </span>
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  windowControls.minimize()
-                }}
-                className="w-3 h-3 rounded-full bg-[#FFBD2E] hover:bg-[#FFBD2E]/80 transition-colors relative group"
-                aria-label="Minimize"
-                style={{
-                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)',
-                }}
-              >
-                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg width="6" height="2" viewBox="0 0 6 2" fill="none">
-                    <path d="M1 1H5" stroke="#5A4000" strokeWidth="1.2" strokeLinecap="round"/>
-                  </svg>
-                </span>
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  windowControls.maximize()
-                }}
-                className="w-3 h-3 rounded-full bg-[#28C840] hover:bg-[#28C840]/80 transition-colors relative group"
-                aria-label="Maximize"
-                style={{
-                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)',
-                }}
-              >
-                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg width="6" height="6" viewBox="0 0 6 6" fill="none">
-                    <path d="M1 1L2.5 1M1 1L1 2.5M5 5L3.5 5M5 5L5 3.5" stroke="#005A00" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </span>
-              </button>
-            </div>
+            <TrafficLights
+              onClose={windowControls.close}
+              onMinimize={windowControls.minimize}
+              onMaximize={windowControls.maximize}
+            />
           )}
           
           {/* Layout toggle */}

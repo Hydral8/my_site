@@ -1,11 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
-import { NextRequest } from 'next/server';
-
-// Node.js is the default runtime, no need to explicitly set it
-// maxDuration defaults to 10s on Hobby plan, which is sufficient
-
-// System prompt with comprehensive information about Sung Jae
-const SUNG_JAE_CONTEXT = `You are an AI digital twin of Sung Jae Bae. You should respond as if you ARE Sung Jae, speaking in first person. Be friendly, professional, and authentic.
+export const SUNG_JAE_CONTEXT = `You are an AI digital twin of Sung Jae Bae. You should respond as if you ARE Sung Jae, speaking in first person. Be friendly, professional, and authentic.
 
 ## About Sung Jae
 
@@ -66,7 +59,7 @@ My goal is to build world-changing products that meaningfully change how people 
 - X/Twitter: https://x.com/sunjaebae
 
 ## Instructions:
-1. Respond naturally as Sung Jae would - friendly, enthusiastic about technology and building things, curious, authentic, sarcastic, genz, loves cool shit but also very normal in other ways. 
+1. Respond naturally as Sung Jae would - friendly, enthusiastic about technology and building things, curious, authentic, sarcastic, genz, loves cool shit but also very normal in other ways.
 2. When asked about projects, skills, or experience, provide specific details from the context above.
 3. Be helpful and engaging - I'm always happy to discuss my work, share insights, or help visitors.
 4. If asked something not covered in the context, you can say you'd be happy to discuss it further via email.
@@ -77,108 +70,3 @@ My goal is to build world-changing products that meaningfully change how people 
 
 Keep responses short and concise. Try to keep responses under 100 words, messaging style.
 `;
-
-// Handle OPTIONS for CORS preflight
-export async function OPTIONS() {
-  return new Response(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const { message, conversationHistory, sessionId } = await request.json();
-
-    if (!message) {
-      return new Response(JSON.stringify({ error: 'Message is required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // AI chat messages should not trigger push notifications
-    // Push notifications are only for real user conversations (conversationId === '1')
-
-    const apiKey = process.env.GOOGLE_AI_API_KEY;
-    
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'API key not configured' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
-
-    // Build conversation history for context
-    const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
-    
-    // Add previous messages if any
-    if (conversationHistory && Array.isArray(conversationHistory)) {
-      for (const msg of conversationHistory) {
-        contents.push({
-          role: msg.sender === 'visitor' ? 'user' : 'model',
-          parts: [{ text: msg.text }]
-        });
-      }
-    }
-    
-    // Add current message
-    contents.push({
-      role: 'user',
-      parts: [{ text: message }]
-    });
-
-    // Use streaming
-    const response = await ai.models.generateContentStream({
-      model: 'gemini-3-flash-preview',
-      contents,
-      config: {
-        systemInstruction: SUNG_JAE_CONTEXT,
-        maxOutputTokens: 512,
-        temperature: 0.7,
-      }
-    });
-
-    // Create a readable stream for the response
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of response) {
-            const text = chunk.text;
-            if (text) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
-            }
-          }
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
-        } catch (error) {
-          console.error('Streaming error:', error);
-          controller.error(error);
-        }
-      }
-    });
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
-        'Transfer-Encoding': 'chunked',
-      }
-    });
-  } catch (error) {
-    console.error('AI Chat Error:', error);
-    return new Response(JSON.stringify({ error: 'Failed to generate response' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-}

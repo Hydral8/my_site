@@ -5,11 +5,25 @@ import React from 'react'
 import { motion } from 'framer-motion'
 import { useWindowManager } from './WindowManager'
 import { WindowState } from '@/types/macos'
+import TrafficLights from './TrafficLights'
 
 // Context for drag handler
 const DragHandlerContext = createContext<((e: React.MouseEvent) => void) | null>(null)
 
-export const useDragHandler = () => useContext(DragHandlerContext)
+const useDragHandler = () => useContext(DragHandlerContext)
+
+export function useDraggableHeader() {
+  const dragHandler = useDragHandler()
+  return (e: React.MouseEvent) => {
+    if (
+      e.target === e.currentTarget ||
+      (!(e.target as HTMLElement).closest('button') &&
+       !(e.target as HTMLElement).closest('input'))
+    ) {
+      dragHandler?.(e)
+    }
+  }
+}
 
 const DragHandlerProvider = ({ 
   handler, 
@@ -32,8 +46,8 @@ interface WindowProps {
   children: React.ReactNode
 }
 
-// SVG Filter for glass distortion
-const WindowGlassFilter = () => (
+// SVG Filter for glass distortion - rendered once globally in MacOSDesktop
+export const WindowGlassFilter = () => (
   <svg
     style={{ position: "absolute", width: 0, height: 0, pointerEvents: "none" }}
   >
@@ -72,7 +86,6 @@ export default function Window({ window, children }: WindowProps) {
     focusWindow,
     updateWindowPosition,
     updateWindowSize,
-    activeWindowId,
     apps,
     getDockIconPosition,
     getMinimizedWindowPosition,
@@ -81,11 +94,13 @@ export default function Window({ window, children }: WindowProps) {
 
   const windowRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
-  const [isResizing, setIsResizing] = useState(false)
+  const [resizeDir, setResizeDir] = useState<string | null>(null)
+  const [isAnimating, setIsAnimating] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null)
+  const [resizeBounds, setResizeBounds] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const resizeStartRef = useRef<{ mx: number; my: number; x: number; y: number; w: number; h: number } | null>(null)
 
-  const isActive = activeWindowId === window.id
   const app = apps.find((a) => a.id === window.appId)
   const hasCustomTrafficLights = app?.customTrafficLights || false
 
@@ -109,30 +124,19 @@ export default function Window({ window, children }: WindowProps) {
     }
   }, [window.id, setMinimizedPreview])
 
-  // When minimize is triggered, capture HTML sync (before animation), then flush async
+  // When minimize is triggered, capture HTML sync (before animation) — flush deferred to onAnimationComplete
   useLayoutEffect(() => {
     if (window.isMinimized && !wasMinimizedRef.current) {
-      // Capture HTML immediately while window is still fully rendered
       captureHtmlToRef()
-      // Flush to state async (doesn't block animation)
-      requestAnimationFrame(() => {
-        flushCapturedHtml()
-      })
     }
     wasMinimizedRef.current = window.isMinimized
-  }, [window.isMinimized, captureHtmlToRef, flushCapturedHtml])
+  }, [window.isMinimized, captureHtmlToRef])
 
   // Handle minimize with preview capture (for built-in traffic lights)
   const handleMinimize = useCallback(() => {
-    // Capture HTML first (sync, fast)
     captureHtmlToRef()
-    // Start minimize animation immediately
     minimizeWindow(window.id)
-    // Flush captured HTML to state async
-    requestAnimationFrame(() => {
-      flushCapturedHtml()
-    })
-  }, [captureHtmlToRef, minimizeWindow, window.id, flushCapturedHtml])
+  }, [captureHtmlToRef, minimizeWindow, window.id])
 
   // Make window visible immediately when reopening (before animation starts)
   useEffect(() => {
@@ -141,6 +145,8 @@ export default function Window({ window, children }: WindowProps) {
     }
   }, [window.isMinimized])
 
+  const isResizing = resizeDir !== null
+
   useEffect(() => {
     if (!isDragging && !isResizing) return
 
@@ -148,29 +154,50 @@ export default function Window({ window, children }: WindowProps) {
       if (isDragging) {
         const newX = e.clientX - dragOffset.x
         const newY = Math.max(28, e.clientY - dragOffset.y) // Don't go above menu bar
-        // Update local position immediately for snappy dragging
         setDragPosition({ x: newX, y: newY })
       }
 
-      if (isResizing) {
-        const rect = windowRef.current?.getBoundingClientRect()
-        if (!rect) return
+      if (resizeDir && resizeStartRef.current) {
+        const s = resizeStartRef.current
+        const dx = e.clientX - s.mx
+        const dy = e.clientY - s.my
+        const minW = app?.minSize?.width || 400
+        const minH = app?.minSize?.height || 300
+        const maxW = app?.maxSize?.width || Infinity
+        const maxH = app?.maxSize?.height || Infinity
 
-        const newWidth = Math.max(app?.minSize?.width || 400, e.clientX - rect.left)
-        const newHeight = Math.max(app?.minSize?.height || 300, e.clientY - rect.top)
+        let newW = s.w, newH = s.h, newX = s.x, newY = s.y
 
-        updateWindowSize(window.id, { width: newWidth, height: newHeight })
+        if (resizeDir.includes('e')) newW = s.w + dx
+        if (resizeDir.includes('w')) { newW = s.w - dx; newX = s.x + dx }
+        if (resizeDir.includes('s')) newH = s.h + dy
+        if (resizeDir.includes('n')) { newH = s.h - dy; newY = s.y + dy }
+
+        // Clamp size
+        const clampedW = Math.min(maxW, Math.max(minW, newW))
+        const clampedH = Math.min(maxH, Math.max(minH, newH))
+
+        // Adjust position if clamped on left/top edges
+        if (resizeDir.includes('w')) newX = s.x + s.w - clampedW
+        if (resizeDir.includes('n')) newY = Math.max(28, s.y + s.h - clampedH)
+
+        setResizeBounds({ x: newX, y: newY, w: clampedW, h: clampedH })
       }
     }
 
     const handleMouseUp = () => {
       if (isDragging && dragPosition) {
-        // Update the actual window position in the manager when dragging ends
         updateWindowPosition(window.id, dragPosition)
         setDragPosition(null)
       }
+      if (resizeBounds) {
+        updateWindowPosition(window.id, { x: resizeBounds.x, y: resizeBounds.y })
+        updateWindowSize(window.id, { width: resizeBounds.w, height: resizeBounds.h })
+        setResizeBounds(null)
+      }
       setIsDragging(false)
-      setIsResizing(false)
+      setResizeDir(null)
+      resizeStartRef.current = null
     }
 
     globalThis.window.addEventListener('mousemove', handleMouseMove)
@@ -180,7 +207,7 @@ export default function Window({ window, children }: WindowProps) {
       globalThis.window.removeEventListener('mousemove', handleMouseMove)
       globalThis.window.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isDragging, isResizing, dragOffset, dragPosition, window.id, updateWindowPosition, updateWindowSize, app])
+  }, [isDragging, isResizing, resizeDir, resizeBounds, dragOffset, dragPosition, window.id, updateWindowPosition, updateWindowSize, app])
 
   const handleMouseDownOnTitleBar = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('title-text')) {
@@ -212,14 +239,26 @@ export default function Window({ window, children }: WindowProps) {
     focusWindow(window.id)
   }
 
-  const handleMouseDownOnResize = (e: React.MouseEvent) => {
+  const handleMouseDownOnResize = (e: React.MouseEvent, dir: string) => {
     e.preventDefault()
-    setIsResizing(true)
+    resizeStartRef.current = {
+      mx: e.clientX, my: e.clientY,
+      x: window.position.x, y: window.position.y,
+      w: window.size.width, h: window.size.height,
+    }
+    setResizeDir(dir)
     focusWindow(window.id)
   }
 
-  // Use drag position if dragging, otherwise use window position
-  const currentPosition = isDragging && dragPosition ? dragPosition : window.position
+  // Use local position during drag/resize for immediate feedback
+  const currentPosition = isDragging && dragPosition
+    ? dragPosition
+    : resizeBounds
+      ? { x: resizeBounds.x, y: resizeBounds.y }
+      : window.position
+  const currentSize = resizeBounds
+    ? { width: resizeBounds.w, height: resizeBounds.h }
+    : window.size
 
   // Get dock icon position for this window's app (used for initial open animation)
   const appDockIconPos = getDockIconPosition(window.appId)
@@ -270,9 +309,7 @@ export default function Window({ window, children }: WindowProps) {
   }
 
   return (
-    <>
-      <WindowGlassFilter />
-      <motion.div
+    <motion.div
         ref={windowRef}
         initial={initialState}
         animate={window.isMinimized ? minimizedState : openState}
@@ -284,22 +321,26 @@ export default function Window({ window, children }: WindowProps) {
           }
         }}
         transition={{
-          duration: isDragging ? 0 : 0.35,
+          duration: (isDragging || isResizing) ? 0 : 0.35,
           ease: [0.4, 0, 0.2, 1],
         }}
         className="fixed select-none"
         style={{
-          width: window.size.width,
-          height: window.size.height,
+          width: currentSize.width,
+          height: currentSize.height,
           zIndex: window.zIndex,
           pointerEvents: window.isMinimized ? 'none' : 'auto',
           transformOrigin: 'center bottom',
           perspective: 1400,
+          willChange: isAnimating ? 'transform, opacity' : 'auto',
         }}
         onMouseDown={() => !window.isMinimized && focusWindow(window.id)}
+        onAnimationStart={() => setIsAnimating(true)}
         onAnimationComplete={() => {
+          setIsAnimating(false)
           if (window.isMinimized && windowRef.current) {
             windowRef.current.style.visibility = 'hidden'
+            flushCapturedHtml()
           } else if (windowRef.current) {
             windowRef.current.style.visibility = 'visible'
           }
@@ -308,43 +349,38 @@ export default function Window({ window, children }: WindowProps) {
         <div className={`relative w-full h-full overflow-hidden`} style={{ borderRadius: '12px' }}>
           {/* Glass effect layers */}
           <div className="absolute inset-0 z-0" style={{ overflow: hasCustomTrafficLights ? 'visible' : 'hidden' }}>
-            {/* Distortion + Blur layer */}
-            <div 
-              className="absolute inset-0" 
+            {/* Distortion + Blur layer — filters disabled during animation for performance */}
+            <div
+              className="absolute inset-0"
               style={{
-                backdropFilter: 'blur(60px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(60px) saturate(180%)',
-                filter: 'url(#window-glass-distortion)',
+                backdropFilter: isAnimating ? 'none' : 'blur(60px) saturate(180%)',
+                WebkitBackdropFilter: isAnimating ? 'none' : 'blur(60px) saturate(180%)',
+                filter: isAnimating ? 'none' : 'url(#window-glass-distortion)',
+                transition: 'backdrop-filter 0.1s ease-out, filter 0.1s ease-out',
               }}
             />
             {/* Tint layer */}
             <div 
               className="absolute inset-0" 
               style={{ 
-                background: isActive
-                  ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.06) 100%)'
-                  : 'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.03) 100%)',
+                background: 
+                  'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.03) 100%)',
               }}
             />
             {/* Shine layer */}
             <div 
               className="absolute inset-0" 
               style={{
-                boxShadow: isActive
-                  ? 'inset 1px 1px 2px 0 rgba(255, 255, 255, 0.25), inset -1px -1px 2px 0 rgba(255, 255, 255, 0.1)'
-                  : 'inset 1px 1px 2px 0 rgba(255, 255, 255, 0.15), inset -1px -1px 2px 0 rgba(255, 255, 255, 0.05)',
+                boxShadow: 
+                  'inset 1px 1px 2px 0 rgba(255, 255, 255, 0.15), inset -1px -1px 2px 0 rgba(255, 255, 255, 0.05)',
               }}
             />
             {/* Border */}
             <div 
               className="absolute inset-0 pointer-events-none"
               style={{
-                border: isActive
-                  ? '1px solid rgba(99, 102, 241, 0.4)'
-                  : '1px solid rgba(255, 255, 255, 0.18)',
-                boxShadow: isActive
-                  ? '0 25px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(99, 102, 241, 0.3)'
-                  : '0 20px 60px rgba(0, 0, 0, 0.4)',
+                border: '1px solid rgba(255, 255, 255, 0.18)',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.4)',
               }}
             />
           </div>
@@ -361,67 +397,20 @@ export default function Window({ window, children }: WindowProps) {
                 <div 
                   className="absolute inset-0 -z-10"
                   style={{
-                    background: app?.titleBarBackground || (isActive
-                      ? 'rgba(255, 255, 255, 0.08)'
-                      : 'rgba(255, 255, 255, 0.04)'),
+                    background: app?.titleBarBackground || 'rgba(255, 255, 255, 0.04)',
                     backdropFilter: app?.titleBarBackground ? 'none' : 'blur(20px) saturate(150%)',
                     WebkitBackdropFilter: app?.titleBarBackground ? 'none' : 'blur(20px) saturate(150%)',
                   }}
                 />
 
                 {/* Traffic lights */}
-                <div className="flex items-center gap-2 relative z-20">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      closeWindow(window.id)
-                    }}
-                    className="w-3 h-3 rounded-full bg-[#FF5F57] hover:bg-[#FF5F57]/80 transition-colors relative group"
-                    aria-label="Close"
-                    style={{
-                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)',
-                    }}
-                  >
-                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <svg width="6" height="6" viewBox="0 0 6 6" fill="none">
-                        <path d="M1 1L5 5M5 1L1 5" stroke="#5A0000" strokeWidth="1.2" strokeLinecap="round"/>
-                      </svg>
-                    </span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleMinimize()
-                    }}
-                    className="w-3 h-3 rounded-full bg-[#FFBD2E] hover:bg-[#FFBD2E]/80 transition-colors relative group"
-                    aria-label="Minimize"
-                    style={{
-                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)',
-                    }}
-                  >
-                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <svg width="6" height="2" viewBox="0 0 6 2" fill="none">
-                        <path d="M1 1H5" stroke="#5A4000" strokeWidth="1.2" strokeLinecap="round"/>
-                      </svg>
-                    </span>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      maximizeWindow(window.id)
-                    }}
-                    className="w-3 h-3 rounded-full bg-[#28C840] hover:bg-[#28C840]/80 transition-colors relative group"
-                    aria-label="Maximize"
-                    style={{
-                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3)',
-                    }}
-                  >
-                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <svg width="6" height="6" viewBox="0 0 6 6" fill="none">
-                        <path d="M1 3L3 5L5 1" stroke="#005A00" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </span>
-                  </button>
+                <div className="relative z-20">
+                  <TrafficLights
+                    onClose={() => closeWindow(window.id)}
+                    onMinimize={handleMinimize}
+                    onMaximize={() => maximizeWindow(window.id)}
+                    variant="checkmark"
+                  />
                 </div>
 
                 {/* Title */}
@@ -443,16 +432,21 @@ export default function Window({ window, children }: WindowProps) {
               </DragHandlerProvider>
             </div>
 
-            {/* Resize handle */}
-            {app?.resizable && (
-              <div
-                className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-50"
-                onMouseDown={handleMouseDownOnResize}
-              />
-            )}
+            {/* Resize handles — edges and corners */}
+            {app?.resizable && (<>
+              {/* Edges */}
+              <div className="absolute top-0 left-2 right-2 h-1 cursor-ns-resize z-50" onMouseDown={(e) => handleMouseDownOnResize(e, 'n')} />
+              <div className="absolute bottom-0 left-2 right-2 h-1 cursor-ns-resize z-50" onMouseDown={(e) => handleMouseDownOnResize(e, 's')} />
+              <div className="absolute left-0 top-2 bottom-2 w-1 cursor-ew-resize z-50" onMouseDown={(e) => handleMouseDownOnResize(e, 'w')} />
+              <div className="absolute right-0 top-2 bottom-2 w-1 cursor-ew-resize z-50" onMouseDown={(e) => handleMouseDownOnResize(e, 'e')} />
+              {/* Corners */}
+              <div className="absolute top-0 left-0 w-3 h-3 cursor-nwse-resize z-50" onMouseDown={(e) => handleMouseDownOnResize(e, 'nw')} />
+              <div className="absolute top-0 right-0 w-3 h-3 cursor-nesw-resize z-50" onMouseDown={(e) => handleMouseDownOnResize(e, 'ne')} />
+              <div className="absolute bottom-0 left-0 w-3 h-3 cursor-nesw-resize z-50" onMouseDown={(e) => handleMouseDownOnResize(e, 'sw')} />
+              <div className="absolute bottom-0 right-0 w-3 h-3 cursor-nwse-resize z-50" onMouseDown={(e) => handleMouseDownOnResize(e, 'se')} />
+            </>)}
           </div>
         </div>
       </motion.div>
-    </>
   )
 }
