@@ -255,7 +255,7 @@ export default function ChatApp({ windowId, windowControls }: AppComponentProps)
     refetchOnMount: false, // Don't refetch on mount if data exists
   })
 
-  const userChatMessages = userChatData?.messages || []
+  const userChatMessages = useMemo(() => userChatData?.messages || [], [userChatData?.messages])
 
   // Load messages for AI chat (conversation id 2)
   // AI chat is transient - only stored in client-side state, not in Redis
@@ -276,7 +276,7 @@ export default function ChatApp({ windowId, windowControls }: AppComponentProps)
     refetchOnMount: false, // Don't refetch on mount if data exists
   })
 
-  const aiChatMessages = aiChatData?.messages || []
+  const aiChatMessages = useMemo(() => aiChatData?.messages || [], [aiChatData?.messages])
 
   // Derive current conversation messages from query data (no useEffect needed!)
   // Merge initial messages with Redis data so welcome messages show even when Redis is empty
@@ -1042,7 +1042,7 @@ export default function ChatApp({ windowId, windowControls }: AppComponentProps)
             className="h-14 bg-[#252525]/90 backdrop-blur-sm border-b border-white/5 flex items-center justify-center px-4"
             onMouseDown={(e) => {
               if (!(e.target as HTMLElement).closest('button')) {
-                dragHandler?.(e)
+                headerDrag?.(e)
               }
             }}
           >
